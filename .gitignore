@@ -28,6 +28,7 @@ __pycache__/
 
 # Distribution & Build
 build/
+*.spec
 develop-eggs/
 dist/
 downloads/

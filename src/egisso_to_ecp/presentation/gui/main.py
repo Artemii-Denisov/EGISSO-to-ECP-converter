@@ -29,6 +29,33 @@ from PySide6.QtWidgets import (
 from egisso_to_ecp.domain.models import ConversionConfig, ConversionSummary
 from egisso_to_ecp.presentation.gui.worker import ConversionWorker
 
+APP_VERSION = "0.1.0"
+
+LICENSE_AND_DISCLAIMER_TEXT = """ЛИЦЕНЗИЯ НА БЕСПЛАТНОЕ ИСПОЛЬЗОВАНИЕ (MIT)
+И ОТКАЗ РАЗРАБОТЧИКА ОТ ОТВЕТСТВЕННОСТИ
+
+1. Бесплатное использование (MIT License)
+Данное программное обеспечение распространяется бесплатно с открытым исходным кодом на условиях лицензии MIT. Любое физическое или юридическое лицо, включая государственные, муниципальные, образовательные и социальные учреждения (ОНМСЗ), вправе свободно и безвозмездно устанавливать, запускать, копировать и распространять программу.
+
+2. Независимый статус
+Программа является независимой вспомогательной утилитой и НЕ является официальным продуктом СФР, Минтруда России или оператора ГИС «ЕЦП» / ЕГИССО / ЛК РСМСЗ.
+
+3. Отказ от ответственности (AS IS)
+Программа предоставляется «КАК ЕСТЬ» («AS IS»), без каких-либо гарантий. Разработчик не несёт ответственности за:
+• достоверность и полноту исходных и сформированных файлов (CSV, XLSX);
+• результаты приёмки пакетов и прохождения ФЛК на портале ГИС «ЕЦП» / ЛК РСМСЗ;
+• любые прямые или косвенные убытки, штрафы, срывы сроков или потерю данных;
+• соблюдение требований ФЗ-152 «О персональных данных» (все данные обрабатываются исключительно локально на компьютере пользователя и никуда не передаются).
+
+Ответственность за проверку сформированных пакетов перед загрузкой в государственные информационные системы несёт пользователь / уполномоченный оператор."""
+
+
+def _get_default_output_dir() -> Path:
+    """Returns default output directory next to executable when frozen, or in cwd."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "output"
+    return Path.cwd() / "output"
+
 WIN11_STYLESHEET = """
 QMainWindow {
     background-color: #F3F3F3;
@@ -202,7 +229,7 @@ class MainWindow(QMainWindow):
         files_layout.addWidget(QLabel("Папка сохранения:"), 1, 0)
         self.txt_output = QLineEdit()
         self.txt_output.setPlaceholderText("Выберите папку для сохранения готовых пакетов")
-        default_out = str(Path.cwd() / "output")
+        default_out = str(_get_default_output_dir())
         self.txt_output.setText(default_out)
         files_layout.addWidget(self.txt_output, 1, 1)
         btn_browse_output = QPushButton("Обзор...")
@@ -278,6 +305,24 @@ class MainWindow(QMainWindow):
         self.txt_log = QTextEdit()
         self.txt_log.setReadOnly(True)
         main_layout.addWidget(self.txt_log, stretch=1)
+
+        # 6. License & Disclaimer Footer
+        footer_layout = QHBoxLayout()
+        lbl_disclaimer = QLabel(
+            "Бесплатное ПО (MIT). Предоставляется «КАК ЕСТЬ» без гарантий — "
+            "проверяйте пакеты перед загрузкой в ГИС ЕЦП."
+        )
+        lbl_disclaimer.setStyleSheet("color: #616161; font-size: 11px;")
+        lbl_disclaimer.setWordWrap(True)
+        footer_layout.addWidget(lbl_disclaimer, stretch=1)
+
+        btn_license = QPushButton("Лицензия и отказ от ответственности")
+        btn_license.clicked.connect(self._show_license_dialog)
+        footer_layout.addWidget(btn_license)
+        main_layout.addLayout(footer_layout)
+
+    def _show_license_dialog(self) -> None:
+        QMessageBox.information(self, "Лицензия (MIT) и отказ от ответственности", LICENSE_AND_DISCLAIMER_TEXT)
 
     def _browse_input(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Выберите папку с файлами ЕГИССО")
@@ -381,6 +426,9 @@ class MainWindow(QMainWindow):
 
 def run_gui() -> None:
     """Entry point for GUI application."""
+    if "--version" in sys.argv:
+        print(f"egisso-to-ecp {APP_VERSION}")
+        return
     app = QApplication.instance() or QApplication(sys.argv)
     window = MainWindow()
     window.show()
