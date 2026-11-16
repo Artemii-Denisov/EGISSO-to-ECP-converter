@@ -87,7 +87,7 @@ class _SHFILEINFOW(ctypes.Structure):
 
 def _refresh_windows_icon_cache(exe_path: Path) -> None:
     """Evicts stale Explorer icon cache entries for `exe_path` (non-blocking)."""
-    if sys.platform != "win32":
+    if os.environ.get("CI") or sys.platform != "win32":
         return
     try:
         shell32 = ctypes.windll.shell32
@@ -125,6 +125,12 @@ def _refresh_windows_icon_cache(exe_path: Path) -> None:
 
 
 if __name__ == "__main__":
-    output_exe = build()
-    size_mb = output_exe.stat().st_size / (1024 * 1024)
-    print(f"Сборка успешно завершена: {output_exe} ({size_mb:.1f} МБ)")
+    try:
+        output_exe = build()
+        size_mb = output_exe.stat().st_size / (1024 * 1024)
+        print(f"Сборка успешно завершена: {output_exe} ({size_mb:.1f} МБ)")
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
+        sys.exit(1)
