@@ -1,19 +1,20 @@
-"""Modern Windows 11 styled Desktop GUI for egisso-to-ecp."""
+"""Antigravity / Codex inspired Desktop GUI for egisso-to-ecp."""
 
 from __future__ import annotations
 
+import ctypes
 import os
 import sys
 from pathlib import Path
 
-from PySide6.QtGui import QCloseEvent, QFont
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QCloseEvent, QColor, QFont, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QFileDialog,
     QFrame,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -31,23 +32,195 @@ from egisso_to_ecp.presentation.gui.worker import ConversionWorker
 
 APP_VERSION = "0.1.0"
 
-LICENSE_AND_DISCLAIMER_TEXT = """ЛИЦЕНЗИЯ НА БЕСПЛАТНОЕ ИСПОЛЬЗОВАНИЕ (MIT)
-И ОТКАЗ РАЗРАБОТЧИКА ОТ ОТВЕТСТВЕННОСТИ
+LICENSE_AND_DISCLAIMER_TEXT = """Лицензия на бесплатное использование (MIT) и отказ от ответственности
 
-1. Бесплатное использование (MIT License)
-Данное программное обеспечение распространяется бесплатно с открытым исходным кодом на условиях лицензии MIT. Любое физическое или юридическое лицо, включая государственные, муниципальные, образовательные и социальные учреждения (ОНМСЗ), вправе свободно и безвозмездно устанавливать, запускать, копировать и распространять программу.
+1. Условия использования (лицензия MIT)
+Программа распространяется свободно и бесплатно с открытым исходным кодом. Любые физические и юридические лица, включая государственные, муниципальные, образовательные и социальные учреждения (ОНМСЗ), могут безвозмездно устанавливать, запускать, копировать и адаптировать данное ПО без лицензионных отчислений.
 
 2. Независимый статус
-Программа является независимой вспомогательной утилитой и НЕ является официальным продуктом СФР, Минтруда России или оператора ГИС «ЕЦП» / ЕГИССО / ЛК РСМСЗ.
+Утилита является самостоятельным инструментом подготовки реестров и не является официальным программным продуктом СФР, Минтруда России или операторов ГИС «ЕЦП» / ЕГИССО / ЛК РСМСЗ.
 
-3. Отказ от ответственности (AS IS)
-Программа предоставляется «КАК ЕСТЬ» («AS IS»), без каких-либо гарантий. Разработчик не несёт ответственности за:
-• достоверность и полноту исходных и сформированных файлов (CSV, XLSX);
-• результаты приёмки пакетов и прохождения ФЛК на портале ГИС «ЕЦП» / ЛК РСМСЗ;
-• любые прямые или косвенные убытки, штрафы, срывы сроков или потерю данных;
-• соблюдение требований ФЗ-152 «О персональных данных» (все данные обрабатываются исключительно локально на компьютере пользователя и никуда не передаются).
+3. Отказ разработчика от ответственности
+ПО предоставляется без прямых или подразумеваемых гарантий. Разработчик не несёт ответственности за:
+• полноту и достоверность исходных реестров и сформированных выходных файлов (CSV, XLSX);
+• результаты прохождения форматно-логического контроля (ФЛК) и приёмки пакетов на портале ГИС «ЕЦП» / ЛК РСМСЗ;
+• любые прямые или косвенные убытки, штрафы или нарушение сроков отчётности;
+• соблюдение требований Федерального закона № 152-ФЗ «О персональных данных».
 
-Ответственность за проверку сформированных пакетов перед загрузкой в государственные информационные системы несёт пользователь / уполномоченный оператор."""
+Все данные обрабатываются исключительно локально на компьютере пользователя без передачи в сеть Интернет. Проверку сформированных пакетов перед загрузкой в государственные системы осуществляет пользователь / уполномоченный оператор."""
+
+STUDIO_STYLESHEET = """
+QMainWindow, QWidget#CentralCanvas {
+    background-color: #0D0F13;
+    color: #E5E7EB;
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+}
+
+QFrame#SurfaceCard {
+    background-color: #151821;
+    border: 1px solid #242934;
+    border-radius: 10px;
+}
+
+QFrame#Divider {
+    background-color: #232833;
+    max-height: 1px;
+    min-height: 1px;
+    border: none;
+}
+
+QLabel#HeaderTitle {
+    color: #F3F4F6;
+    font-size: 17px;
+    font-weight: 600;
+}
+
+QLabel#VersionBadge {
+    background-color: #1B2436;
+    color: #60A5FA;
+    border: 1px solid #2A3A57;
+    border-radius: 5px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+QLabel#HeaderSubtitle {
+    color: #8B93A6;
+    font-size: 12px;
+}
+
+QLabel#SectionTitle {
+    color: #7C8599;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+QLabel#FieldLabel {
+    color: #C7CDD9;
+    font-size: 13px;
+}
+
+QLabel#MutedText {
+    color: #7C8599;
+    font-size: 12px;
+}
+
+QLineEdit {
+    background-color: #0A0C10;
+    color: #F3F4F6;
+    border: 1px solid #282E3A;
+    border-radius: 6px;
+    padding: 0px 12px;
+    font-size: 13px;
+    selection-background-color: #2563EB;
+    selection-color: #FFFFFF;
+}
+
+QLineEdit:hover {
+    border-color: #363E4F;
+}
+
+QLineEdit:focus {
+    border-color: #3B82F6;
+    background-color: #0C0F14;
+}
+
+QPushButton {
+    background-color: #1C202B;
+    color: #E5E7EB;
+    border: 1px solid #2D3342;
+    border-radius: 6px;
+    padding: 0px 16px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+QPushButton:hover {
+    background-color: #242A38;
+    border-color: #3E4659;
+}
+
+QPushButton:pressed {
+    background-color: #171B24;
+}
+
+QPushButton:disabled {
+    background-color: #14171F;
+    color: #555D6E;
+    border-color: #202530;
+}
+
+QPushButton#SubtleButton {
+    background-color: #151821;
+    color: #9CA3AF;
+    border: 1px solid #272C38;
+    padding: 0px 12px;
+    font-size: 12px;
+}
+
+QPushButton#SubtleButton:hover {
+    background-color: #1D222E;
+    color: #E5E7EB;
+    border-color: #363D4E;
+}
+
+QPushButton#PrimaryButton {
+    background-color: #2563EB;
+    color: #FFFFFF;
+    border: 1px solid #3B82F6;
+    font-weight: 600;
+    padding: 0px 20px;
+}
+
+QPushButton#PrimaryButton:hover {
+    background-color: #1D4ED8;
+    border-color: #60A5FA;
+}
+
+QPushButton#PrimaryButton:pressed {
+    background-color: #1E40AF;
+}
+
+QPushButton#PrimaryButton:disabled {
+    background-color: #1C273F;
+    color: #64748B;
+    border-color: #23314F;
+}
+
+QCheckBox {
+    color: #E2E6EE;
+    spacing: 8px;
+    font-size: 13px;
+}
+
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+}
+
+QProgressBar {
+    background-color: #1E232E;
+    border: none;
+    border-radius: 3px;
+}
+
+QProgressBar::chunk {
+    background-color: #3B82F6;
+    border-radius: 3px;
+}
+
+QTextEdit#ConsoleLog {
+    background-color: #090B0E;
+    color: #A6B1C4;
+    border: 1px solid #202530;
+    border-radius: 8px;
+    font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    padding: 8px 10px;
+}
+"""
 
 
 def _get_default_output_dir() -> Path:
@@ -56,121 +229,40 @@ def _get_default_output_dir() -> Path:
         return Path(sys.executable).resolve().parent / "output"
     return Path.cwd() / "output"
 
-WIN11_STYLESHEET = """
-QMainWindow {
-    background-color: #F3F3F3;
-    font-family: 'Segoe UI', sans-serif;
-}
 
-QWidget {
-    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
-    font-size: 13px;
-    color: #1F1F1F;
-}
+def apply_studio_theme(app: QApplication) -> None:
+    """Applies Fusion style and dark Antigravity/Codex palette to the application."""
+    app.setStyle("Fusion")
+    palette = QPalette()
+    palette.setColor(QPalette.ColorRole.Window, QColor("#0D0F13"))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor("#E5E7EB"))
+    palette.setColor(QPalette.ColorRole.Base, QColor("#1C202B"))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#151821"))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor("#151821"))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor("#E5E7EB"))
+    palette.setColor(QPalette.ColorRole.Text, QColor("#F3F4F6"))
+    palette.setColor(QPalette.ColorRole.Button, QColor("#1C202B"))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#E5E7EB"))
+    palette.setColor(QPalette.ColorRole.Highlight, QColor("#2563EB"))
+    palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#FFFFFF"))
+    palette.setColor(QPalette.ColorRole.PlaceholderText, QColor("#646D80"))
+    app.setPalette(palette)
 
-QGroupBox {
-    font-weight: 600;
-    border: 1px solid #E0E0E0;
-    border-radius: 8px;
-    margin-top: 12px;
-    padding-top: 18px;
-    background-color: #FFFFFF;
-}
 
-QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    left: 12px;
-    padding: 0 4px;
-    color: #0067C0;
-}
-
-QLineEdit {
-    background-color: #FFFFFF;
-    border: 1px solid #D1D1D1;
-    border-bottom: 2px solid #0067C0;
-    border-radius: 4px;
-    padding: 6px 10px;
-    font-size: 13px;
-    selection-background-color: #0067C0;
-}
-
-QLineEdit:focus {
-    border: 1px solid #0067C0;
-    border-bottom: 2px solid #0067C0;
-    background-color: #FBFCFD;
-}
-
-QPushButton {
-    background-color: #FDFDFD;
-    border: 1px solid #CECECE;
-    border-radius: 5px;
-    padding: 7px 16px;
-    font-weight: 500;
-    font-size: 13px;
-}
-
-QPushButton:hover {
-    background-color: #F6F6F6;
-    border-color: #BCBCBC;
-}
-
-QPushButton:pressed {
-    background-color: #EDEDED;
-}
-
-QPushButton#PrimaryButton {
-    background-color: #0067C0;
-    color: #FFFFFF;
-    border: 1px solid #005A9E;
-    font-weight: 600;
-    font-size: 14px;
-    padding: 10px 24px;
-    border-radius: 6px;
-}
-
-QPushButton#PrimaryButton:hover {
-    background-color: #1975C5;
-}
-
-QPushButton#PrimaryButton:pressed {
-    background-color: #005A9E;
-}
-
-QPushButton#PrimaryButton:disabled {
-    background-color: #CCCCCC;
-    border-color: #BDBDBD;
-    color: #888888;
-}
-
-QCheckBox {
-    spacing: 8px;
-    font-size: 13px;
-}
-
-QProgressBar {
-    border: 1px solid #D5D5D5;
-    border-radius: 5px;
-    text-align: center;
-    background-color: #E6E6E6;
-    height: 14px;
-    font-size: 11px;
-}
-
-QProgressBar::chunk {
-    background-color: #0067C0;
-    border-radius: 4px;
-}
-
-QTextEdit {
-    background-color: #FFFFFF;
-    border: 1px solid #E0E0E0;
-    border-radius: 6px;
-    font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 12px;
-    padding: 6px;
-}
-"""
+def _enable_windows_dark_titlebar(window: QMainWindow) -> None:
+    """Requests Windows 10/11 dark titlebar frame via DWM API when available."""
+    if sys.platform != "win32":
+        return
+    try:
+        hwnd = int(window.winId())
+        value = ctypes.c_int(1)
+        dwmapi = ctypes.windll.dwmapi
+        # Attribute 20 on Windows 11 / 20H1+, fallback attribute 19 on older Win10 builds
+        res = dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), ctypes.sizeof(value))
+        if res != 0:
+            dwmapi.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(value), ctypes.sizeof(value))
+    except (AttributeError, OSError, ValueError):
+        pass
 
 
 class MainWindow(QMainWindow):
@@ -178,151 +270,220 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Миграция данных ЕГИССО -> ГИС ЕЦП (ЛК РСМСЗ)")
-        self.resize(780, 720)
-        self.setMinimumSize(640, 580)
-        self.setStyleSheet(WIN11_STYLESHEET)
+        self.setWindowTitle("EGISSO → ГИС ЕЦП (ЛК РСМСЗ)")
+        self.resize(840, 720)
+        self.setMinimumSize(700, 600)
+        self.setStyleSheet(STUDIO_STYLESHEET)
 
         self.worker: ConversionWorker | None = None
         self._init_ui()
+        _enable_windows_dark_titlebar(self)
 
     def _init_ui(self) -> None:
         central_widget = QWidget()
+        central_widget.setObjectName("CentralCanvas")
         self.setCentralWidget(central_widget)
+
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setContentsMargins(20, 18, 20, 18)
         main_layout.setSpacing(14)
 
-        # 1. Header Card
-        header_frame = QFrame()
-        header_frame.setStyleSheet("background-color: #FFFFFF; border-radius: 8px; border: 1px solid #E0E0E0; padding: 12px;")
-        header_layout = QVBoxLayout(header_frame)
-        title_label = QLabel("Конвертер исторических данных ЕГИССО в ГИС ЕЦП")
-        title_font = QFont("Segoe UI", 16, QFont.Weight.Bold)
-        title_label.setFont(title_font)
-        title_label.setStyleSheet("color: #0067C0; border: none;")
+        # 1. Top Header Bar
+        header_row = QHBoxLayout()
+        header_row.setSpacing(10)
+
+        title_block = QVBoxLayout()
+        title_block.setSpacing(4)
+
+        title_line = QHBoxLayout()
+        title_line.setSpacing(10)
+        title_label = QLabel("EGISSO → ГИС ЕЦП")
+        title_label.setObjectName("HeaderTitle")
+        title_label.setFont(QFont("Segoe UI", 16, QFont.Weight.DemiBold))
+        title_line.addWidget(title_label)
+
+        version_badge = QLabel(f"v{APP_VERSION}")
+        version_badge.setObjectName("VersionBadge")
+        title_line.addWidget(version_badge)
+        title_line.addStretch()
 
         subtitle_label = QLabel(
-            "Формирование пакетов сведений о решениях (107 столбцов, ФЛК, кодировки UTF-8-BOM / XLSX)"
+            "Конвертация исторических сведений о решениях ЛК РСМСЗ · 107 столбцов · ФЛК · UTF-8 BOM / XLSX"
         )
-        subtitle_label.setStyleSheet("color: #616161; border: none; font-size: 12px;")
-        header_layout.addWidget(title_label)
-        header_layout.addWidget(subtitle_label)
-        main_layout.addWidget(header_frame)
+        subtitle_label.setObjectName("HeaderSubtitle")
 
-        # 2. File Selection Group
-        files_group = QGroupBox("Каталоги и файлы")
-        files_layout = QGridLayout(files_group)
-        files_layout.setContentsMargins(16, 20, 16, 16)
-        files_layout.setSpacing(10)
+        title_block.addLayout(title_line)
+        title_block.addWidget(subtitle_label)
+        header_row.addLayout(title_block, stretch=1)
 
-        # Input path
-        files_layout.addWidget(QLabel("Исходная папка:"), 0, 0)
+        btn_about = QPushButton("О программе и лицензии")
+        btn_about.setObjectName("SubtleButton")
+        btn_about.setFixedHeight(32)
+        btn_about.clicked.connect(self._show_license_dialog)
+        header_row.addWidget(btn_about, alignment=Qt.AlignmentFlag.AlignVCenter)
+
+        main_layout.addLayout(header_row)
+
+        # 2. Card 1: Data Paths
+        paths_card = QFrame()
+        paths_card.setObjectName("SurfaceCard")
+        paths_layout = QGridLayout(paths_card)
+        paths_layout.setContentsMargins(16, 14, 16, 16)
+        paths_layout.setHorizontalSpacing(12)
+        paths_layout.setVerticalSpacing(10)
+
+        lbl_paths_title = QLabel("МАРШРУТЫ ДАННЫХ")
+        lbl_paths_title.setObjectName("SectionTitle")
+        paths_layout.addWidget(lbl_paths_title, 0, 0, 1, 3)
+
+        lbl_in = QLabel("Исходная папка:")
+        lbl_in.setObjectName("FieldLabel")
+        paths_layout.addWidget(lbl_in, 1, 0)
+
         self.txt_input = QLineEdit()
-        self.txt_input.setPlaceholderText("Выберите папку с файлами ЕГИССО (.xlsx)")
-        files_layout.addWidget(self.txt_input, 0, 1)
-        btn_browse_input = QPushButton("Обзор...")
+        self.txt_input.setFixedHeight(36)
+        self.txt_input.setPlaceholderText("Выберите каталог с реестрами ЕГИССО (.xlsx)")
+        paths_layout.addWidget(self.txt_input, 1, 1)
+
+        btn_browse_input = QPushButton("Обзор…")
+        btn_browse_input.setFixedHeight(36)
+        btn_browse_input.setMinimumWidth(96)
         btn_browse_input.clicked.connect(self._browse_input)
-        files_layout.addWidget(btn_browse_input, 0, 2)
+        paths_layout.addWidget(btn_browse_input, 1, 2)
 
-        # Output path
-        files_layout.addWidget(QLabel("Папка сохранения:"), 1, 0)
+        lbl_out = QLabel("Папка выгрузки:")
+        lbl_out.setObjectName("FieldLabel")
+        paths_layout.addWidget(lbl_out, 2, 0)
+
         self.txt_output = QLineEdit()
-        self.txt_output.setPlaceholderText("Выберите папку для сохранения готовых пакетов")
-        default_out = str(_get_default_output_dir())
-        self.txt_output.setText(default_out)
-        files_layout.addWidget(self.txt_output, 1, 1)
-        btn_browse_output = QPushButton("Обзор...")
+        self.txt_output.setFixedHeight(36)
+        self.txt_output.setPlaceholderText("Выберите каталог для готовых пакетов")
+        self.txt_output.setText(str(_get_default_output_dir()))
+        paths_layout.addWidget(self.txt_output, 2, 1)
+
+        btn_browse_output = QPushButton("Обзор…")
+        btn_browse_output.setFixedHeight(36)
+        btn_browse_output.setMinimumWidth(96)
         btn_browse_output.clicked.connect(self._browse_output)
-        files_layout.addWidget(btn_browse_output, 1, 2)
+        paths_layout.addWidget(btn_browse_output, 2, 2)
 
-        main_layout.addWidget(files_group)
+        paths_layout.setColumnStretch(1, 1)
+        main_layout.addWidget(paths_card)
 
-        # 3. Parameters Group (Checkboxes requested by user)
-        options_group = QGroupBox("Параметры конвертации")
-        options_layout = QGridLayout(options_group)
-        options_layout.setContentsMargins(16, 20, 16, 16)
-        options_layout.setSpacing(10)
+        # 3. Card 2: Conversion Parameters
+        options_card = QFrame()
+        options_card.setObjectName("SurfaceCard")
+        options_outer = QVBoxLayout(options_card)
+        options_outer.setContentsMargins(16, 14, 16, 16)
+        options_outer.setSpacing(12)
 
-        # Checkbox 1: Recursive Search (Default: ON)
+        lbl_opts_title = QLabel("ПАРАМЕТРЫ КОНВЕРТАЦИИ")
+        lbl_opts_title.setObjectName("SectionTitle")
+        options_outer.addWidget(lbl_opts_title)
+
+        checks_grid = QGridLayout()
+        checks_grid.setHorizontalSpacing(24)
+        checks_grid.setVerticalSpacing(10)
+
         self.cb_recursive = QCheckBox("Рекурсивный поиск в подпапках")
         self.cb_recursive.setChecked(True)
-        self.cb_recursive.setToolTip("Искать файлы Excel во всех вложенных подкаталогах")
-        options_layout.addWidget(self.cb_recursive, 0, 0)
+        self.cb_recursive.setToolTip("Сканировать все вложенные каталоги и извлекать месяц/год из путей")
+        checks_grid.addWidget(self.cb_recursive, 0, 0)
 
-        # Checkbox 2: Split by Months (Default: ON)
-        self.cb_split_months = QCheckBox("Разбивать по месяцам (отдельный пакет на каждый месяц)")
+        self.cb_split_months = QCheckBox("Разбивать пакеты по месяцам (2023–2026)")
         self.cb_split_months.setChecked(True)
-        self.cb_split_months.setToolTip("Группировать решения по календарным месяцам (2023 - 2026)")
-        options_layout.addWidget(self.cb_split_months, 0, 1)
+        self.cb_split_months.setToolTip("Объединять все меры за один календарный месяц в помесячный пакет")
+        checks_grid.addWidget(self.cb_split_months, 0, 1)
 
-        # Checkbox 3: CSV format (Default: ON)
-        self.cb_format_csv = QCheckBox("Выгружать в формате CSV (ГИС ЕЦП)")
+        self.cb_format_csv = QCheckBox("Формат CSV (стандарт ГИС ЕЦП)")
         self.cb_format_csv.setChecked(True)
         self.cb_format_csv.setToolTip("Сохранять пакеты CSV в отдельную папку /csv/")
-        options_layout.addWidget(self.cb_format_csv, 1, 0)
+        checks_grid.addWidget(self.cb_format_csv, 1, 0)
 
-        # Checkbox 4: Excel format (Default: OFF)
-        self.cb_format_xlsx = QCheckBox("Выгружать в формате Excel (.xlsx)")
+        self.cb_format_xlsx = QCheckBox("Формат Excel (.xlsx)")
         self.cb_format_xlsx.setChecked(False)
         self.cb_format_xlsx.setToolTip("Сохранять пакеты XLSX в отдельную папку /xlsx/")
-        options_layout.addWidget(self.cb_format_xlsx, 1, 1)
+        checks_grid.addWidget(self.cb_format_xlsx, 1, 1)
 
-        # Provider Code
-        options_layout.addWidget(QLabel("Код поставщика (ПоставщикИнформации):"), 2, 0)
+        options_outer.addLayout(checks_grid)
+
+        divider = QFrame()
+        divider.setObjectName("Divider")
+        divider.setFrameShape(QFrame.Shape.HLine)
+        options_outer.addWidget(divider)
+
+        provider_row = QHBoxLayout()
+        provider_row.setSpacing(12)
+        lbl_provider = QLabel("Код поставщика (ПоставщикИнформации):")
+        lbl_provider.setObjectName("FieldLabel")
+        provider_row.addWidget(lbl_provider)
+
         self.txt_provider = QLineEdit("430746")
-        self.txt_provider.setToolTip("Идентификатор поставщика информации из реестра РУВ")
-        options_layout.addWidget(self.txt_provider, 2, 1)
+        self.txt_provider.setFixedHeight(36)
+        self.txt_provider.setFixedWidth(180)
+        self.txt_provider.setToolTip("Числовой код поставщика информации из реестра ГИС ЕЦП")
+        provider_row.addWidget(self.txt_provider)
+        provider_row.addStretch()
 
-        main_layout.addWidget(options_group)
+        options_outer.addLayout(provider_row)
+        main_layout.addWidget(options_card)
 
-        # 4. Action Button & Progress
-        action_layout = QHBoxLayout()
-        self.btn_start = QPushButton("Начать конвертацию")
-        self.btn_start.setObjectName("PrimaryButton")
-        self.btn_start.clicked.connect(self._start_conversion)
-        action_layout.addWidget(self.btn_start)
+        # 4. Card 3: Execution Log Console
+        log_card = QFrame()
+        log_card.setObjectName("SurfaceCard")
+        log_layout = QVBoxLayout(log_card)
+        log_layout.setContentsMargins(16, 14, 16, 16)
+        log_layout.setSpacing(10)
 
-        self.btn_open_folder = QPushButton("Открыть папку с результатами")
-        self.btn_open_folder.clicked.connect(self._open_output_folder)
-        self.btn_open_folder.setEnabled(False)
-        action_layout.addWidget(self.btn_open_folder)
-
-        main_layout.addLayout(action_layout)
-
-        # Progress bar
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setValue(0)
-        self.progress_bar.setTextVisible(True)
-        main_layout.addWidget(self.progress_bar)
+        log_header = QHBoxLayout()
+        lbl_log_title = QLabel("ЖУРНАЛ ВЫПОЛНЕНИЯ")
+        lbl_log_title.setObjectName("SectionTitle")
+        log_header.addWidget(lbl_log_title)
+        log_header.addStretch()
 
         self.lbl_status = QLabel("Готов к работе")
-        self.lbl_status.setStyleSheet("color: #616161; font-style: italic;")
-        main_layout.addWidget(self.lbl_status)
+        self.lbl_status.setObjectName("MutedText")
+        log_header.addWidget(self.lbl_status)
+        log_layout.addLayout(log_header)
 
-        # 5. Live Log Area
-        main_layout.addWidget(QLabel("Журнал операций:"))
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setFixedHeight(6)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setValue(0)
+        log_layout.addWidget(self.progress_bar)
+
         self.txt_log = QTextEdit()
+        self.txt_log.setObjectName("ConsoleLog")
         self.txt_log.setReadOnly(True)
-        main_layout.addWidget(self.txt_log, stretch=1)
+        self.txt_log.setPlaceholderText("Ожидание запуска конвертации…")
+        log_layout.addWidget(self.txt_log, stretch=1)
 
-        # 6. License & Disclaimer Footer
-        footer_layout = QHBoxLayout()
-        lbl_disclaimer = QLabel(
-            "Бесплатное ПО (MIT). Предоставляется «КАК ЕСТЬ» без гарантий — "
-            "проверяйте пакеты перед загрузкой в ГИС ЕЦП."
-        )
-        lbl_disclaimer.setStyleSheet("color: #616161; font-size: 11px;")
-        lbl_disclaimer.setWordWrap(True)
-        footer_layout.addWidget(lbl_disclaimer, stretch=1)
+        main_layout.addWidget(log_card, stretch=1)
 
-        btn_license = QPushButton("Лицензия и отказ от ответственности")
-        btn_license.clicked.connect(self._show_license_dialog)
-        footer_layout.addWidget(btn_license)
-        main_layout.addLayout(footer_layout)
+        # 5. Bottom Action Bar
+        bottom_bar = QHBoxLayout()
+        bottom_bar.setSpacing(10)
+
+        lbl_footer = QLabel("MIT License · Локальная обработка (данные не передаются в сеть)")
+        lbl_footer.setObjectName("MutedText")
+        bottom_bar.addWidget(lbl_footer, stretch=1)
+
+        self.btn_open_folder = QPushButton("Открыть папку выгрузки")
+        self.btn_open_folder.setFixedHeight(38)
+        self.btn_open_folder.setEnabled(False)
+        self.btn_open_folder.clicked.connect(self._open_output_folder)
+        bottom_bar.addWidget(self.btn_open_folder)
+
+        self.btn_start = QPushButton("Запустить конвертацию")
+        self.btn_start.setObjectName("PrimaryButton")
+        self.btn_start.setFixedHeight(38)
+        self.btn_start.clicked.connect(self._start_conversion)
+        bottom_bar.addWidget(self.btn_start)
+
+        main_layout.addLayout(bottom_bar)
 
     def _show_license_dialog(self) -> None:
-        QMessageBox.information(self, "Лицензия (MIT) и отказ от ответственности", LICENSE_AND_DISCLAIMER_TEXT)
+        QMessageBox.information(self, "О программе и лицензии (MIT)", LICENSE_AND_DISCLAIMER_TEXT)
 
     def _browse_input(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Выберите папку с файлами ЕГИССО")
@@ -389,7 +550,7 @@ class MainWindow(QMainWindow):
         self.btn_start.setEnabled(True)
         self.btn_open_folder.setEnabled(True)
         self.progress_bar.setValue(100)
-        self.lbl_status.setText("Конвертация успешно завершена!")
+        self.lbl_status.setText("Конвертация завершена")
 
         msg = (
             f"Обработка завершена!\n\n"
@@ -403,12 +564,12 @@ class MainWindow(QMainWindow):
         if summary.error_report_path:
             msg += f"\nЗамечания ФЛК сохранены в:\n{summary.error_report_path.name}"
 
-        QMessageBox.information(self, "Успех", msg)
+        QMessageBox.information(self, "Готово", msg)
 
     def _on_worker_failed(self, error_message: str) -> None:
         self.btn_start.setEnabled(True)
         self.btn_open_folder.setEnabled(True)
-        self.lbl_status.setText("Произошла ошибка при выполнении")
+        self.lbl_status.setText("Ошибка выполнения")
         QMessageBox.critical(self, "Ошибка выполнения", f"Произошла ошибка:\n{error_message}")
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
@@ -429,7 +590,10 @@ def run_gui() -> None:
     if "--version" in sys.argv:
         print(f"egisso-to-ecp {APP_VERSION}")
         return
-    app = QApplication.instance() or QApplication(sys.argv)
+    app = QApplication.instance()
+    if not isinstance(app, QApplication):
+        app = QApplication(sys.argv)
+    apply_studio_theme(app)
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
