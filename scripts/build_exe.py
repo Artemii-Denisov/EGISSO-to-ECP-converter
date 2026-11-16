@@ -25,7 +25,8 @@ ICON_FILE = ROOT_DIR / "assets" / "app_icon.ico"
 
 def build() -> Path:
     """Packages the PySide6 GUI application into a single-file Windows executable."""
-    write_ico_file(ICON_FILE)
+    if not ICON_FILE.exists():
+        write_ico_file(ICON_FILE)
 
     args = [
         str(ENTRY_POINT),

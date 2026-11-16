@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [
-    { name = "Senior Python Developer" }
+    { name = "Artemii Denisov" }
 ]
 dependencies = [
     "pydantic>=2.7.0",
