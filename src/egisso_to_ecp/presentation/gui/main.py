@@ -6,8 +6,9 @@ import ctypes
 import os
 import sys
 from pathlib import Path
+from string import Template
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QCloseEvent, QColor, QFont, QPalette
 from PySide6.QtWidgets import (
     QApplication,
@@ -49,37 +50,138 @@ LICENSE_AND_DISCLAIMER_TEXT = """Лицензия на бесплатное ис
 
 Все данные обрабатываются исключительно локально на компьютере пользователя без передачи в сеть Интернет. Проверку сформированных пакетов перед загрузкой в государственные системы осуществляет пользователь / уполномоченный оператор."""
 
-STUDIO_STYLESHEET = """
+THEME_TOKENS: dict[str, dict[str, str]] = {
+    "dark": {
+        "bg_canvas": "#0D0F13",
+        "text_primary": "#E5E7EB",
+        "text_strong": "#F3F4F6",
+        "text_field_label": "#C7CDD9",
+        "text_muted": "#7C8599",
+        "text_subtitle": "#8B93A6",
+        "bg_card": "#151821",
+        "border_card": "#242934",
+        "divider": "#232833",
+        "badge_bg": "#1B2436",
+        "badge_text": "#60A5FA",
+        "badge_border": "#2A3A57",
+        "input_bg": "#0A0C10",
+        "input_focus_bg": "#0C0F14",
+        "input_border": "#282E3A",
+        "input_hover_border": "#363E4F",
+        "input_focus_border": "#3B82F6",
+        "btn_bg": "#1C202B",
+        "btn_hover_bg": "#242A38",
+        "btn_pressed_bg": "#171B24",
+        "btn_border": "#2D3342",
+        "btn_hover_border": "#3E4659",
+        "btn_disabled_bg": "#14171F",
+        "btn_disabled_text": "#555D6E",
+        "btn_disabled_border": "#202530",
+        "subtle_bg": "#151821",
+        "subtle_text": "#9CA3AF",
+        "subtle_border": "#272C38",
+        "subtle_hover_bg": "#1D222E",
+        "subtle_hover_border": "#363D4E",
+        "primary_bg": "#2563EB",
+        "primary_hover_bg": "#1D4ED8",
+        "primary_pressed_bg": "#1E40AF",
+        "primary_border": "#3B82F6",
+        "primary_disabled_bg": "#1C273F",
+        "primary_disabled_text": "#64748B",
+        "primary_disabled_border": "#23314F",
+        "cb_text": "#E2E6EE",
+        "cb_unchecked_bg": "#1C202B",
+        "cb_unchecked_border": "#3A4252",
+        "pb_track": "#1E232E",
+        "pb_chunk": "#3B82F6",
+        "console_bg": "#090B0E",
+        "console_text": "#A6B1C4",
+        "console_border": "#202530",
+        "qpal_base": "#1C202B",
+        "qpal_placeholder": "#646D80",
+    },
+    "light": {
+        "bg_canvas": "#F6F8FA",
+        "text_primary": "#1E293B",
+        "text_strong": "#0F172A",
+        "text_field_label": "#334155",
+        "text_muted": "#64748B",
+        "text_subtitle": "#64748B",
+        "bg_card": "#FFFFFF",
+        "border_card": "#E2E6EE",
+        "divider": "#E6E9F0",
+        "badge_bg": "#EFF6FF",
+        "badge_text": "#2563EB",
+        "badge_border": "#BFDBFE",
+        "input_bg": "#FFFFFF",
+        "input_focus_bg": "#FFFFFF",
+        "input_border": "#CBD5E1",
+        "input_hover_border": "#94A3B8",
+        "input_focus_border": "#2563EB",
+        "btn_bg": "#FFFFFF",
+        "btn_hover_bg": "#F8FAFC",
+        "btn_pressed_bg": "#EEF2F7",
+        "btn_border": "#CBD5E1",
+        "btn_hover_border": "#94A3B8",
+        "btn_disabled_bg": "#F8FAFC",
+        "btn_disabled_text": "#94A3B8",
+        "btn_disabled_border": "#E2E8F0",
+        "subtle_bg": "#FFFFFF",
+        "subtle_text": "#475569",
+        "subtle_border": "#DCE2EC",
+        "subtle_hover_bg": "#F1F5F9",
+        "subtle_hover_border": "#CBD5E1",
+        "primary_bg": "#2563EB",
+        "primary_hover_bg": "#1D4ED8",
+        "primary_pressed_bg": "#1E40AF",
+        "primary_border": "#1D4ED8",
+        "primary_disabled_bg": "#CBD5E1",
+        "primary_disabled_text": "#FFFFFF",
+        "primary_disabled_border": "#CBD5E1",
+        "cb_text": "#1E293B",
+        "cb_unchecked_bg": "#FFFFFF",
+        "cb_unchecked_border": "#94A3B8",
+        "pb_track": "#E2E8F0",
+        "pb_chunk": "#2563EB",
+        "console_bg": "#F8FAFC",
+        "console_text": "#1E293B",
+        "console_border": "#E2E8F0",
+        "qpal_base": "#FFFFFF",
+        "qpal_placeholder": "#94A3B8",
+    },
+}
+
+_STUDIO_QSS_TEMPLATE = Template("""
 QMainWindow, QWidget#CentralCanvas {
-    background-color: #0D0F13;
-    color: #E5E7EB;
+    background-color: $bg_canvas;
+    color: $text_primary;
     font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
     font-size: 13px;
 }
 
 QFrame#SurfaceCard {
-    background-color: #151821;
-    border: 1px solid #242934;
+    background-color: $bg_card;
+    border: 1px solid $border_card;
     border-radius: 10px;
 }
 
 QFrame#Divider {
-    background-color: #232833;
+    background-color: $divider;
     max-height: 1px;
     min-height: 1px;
     border: none;
 }
 
 QLabel#HeaderTitle {
-    color: #F3F4F6;
+    color: $text_strong;
     font-size: 17px;
     font-weight: 600;
 }
 
 QLabel#VersionBadge {
-    background-color: #1B2436;
-    color: #60A5FA;
-    border: 1px solid #2A3A57;
+    background-color: $badge_bg;
+    color: $badge_text;
+    border: 1px solid $badge_border;
     border-radius: 5px;
     padding: 2px 8px;
     font-size: 11px;
@@ -87,30 +189,30 @@ QLabel#VersionBadge {
 }
 
 QLabel#HeaderSubtitle {
-    color: #8B93A6;
+    color: $text_subtitle;
     font-size: 12px;
 }
 
 QLabel#SectionTitle {
-    color: #7C8599;
+    color: $text_muted;
     font-size: 11px;
     font-weight: 600;
 }
 
 QLabel#FieldLabel {
-    color: #C7CDD9;
+    color: $text_field_label;
     font-size: 13px;
 }
 
 QLabel#MutedText {
-    color: #7C8599;
+    color: $text_muted;
     font-size: 12px;
 }
 
 QLineEdit {
-    background-color: #0A0C10;
-    color: #F3F4F6;
-    border: 1px solid #282E3A;
+    background-color: $input_bg;
+    color: $text_strong;
+    border: 1px solid $input_border;
     border-radius: 6px;
     padding: 0px 12px;
     font-size: 13px;
@@ -119,18 +221,18 @@ QLineEdit {
 }
 
 QLineEdit:hover {
-    border-color: #363E4F;
+    border-color: $input_hover_border;
 }
 
 QLineEdit:focus {
-    border-color: #3B82F6;
-    background-color: #0C0F14;
+    border-color: $input_focus_border;
+    background-color: $input_focus_bg;
 }
 
 QPushButton {
-    background-color: #1C202B;
-    color: #E5E7EB;
-    border: 1px solid #2D3342;
+    background-color: $btn_bg;
+    color: $text_primary;
+    border: 1px solid $btn_border;
     border-radius: 6px;
     padding: 0px 16px;
     font-size: 13px;
@@ -138,59 +240,59 @@ QPushButton {
 }
 
 QPushButton:hover {
-    background-color: #242A38;
-    border-color: #3E4659;
+    background-color: $btn_hover_bg;
+    border-color: $btn_hover_border;
 }
 
 QPushButton:pressed {
-    background-color: #171B24;
+    background-color: $btn_pressed_bg;
 }
 
 QPushButton:disabled {
-    background-color: #14171F;
-    color: #555D6E;
-    border-color: #202530;
+    background-color: $btn_disabled_bg;
+    color: $btn_disabled_text;
+    border-color: $btn_disabled_border;
 }
 
 QPushButton#SubtleButton {
-    background-color: #151821;
-    color: #9CA3AF;
-    border: 1px solid #272C38;
+    background-color: $subtle_bg;
+    color: $subtle_text;
+    border: 1px solid $subtle_border;
     padding: 0px 12px;
     font-size: 12px;
 }
 
 QPushButton#SubtleButton:hover {
-    background-color: #1D222E;
-    color: #E5E7EB;
-    border-color: #363D4E;
+    background-color: $subtle_hover_bg;
+    color: $text_strong;
+    border-color: $subtle_hover_border;
 }
 
 QPushButton#PrimaryButton {
-    background-color: #2563EB;
+    background-color: $primary_bg;
     color: #FFFFFF;
-    border: 1px solid #3B82F6;
+    border: 1px solid $primary_border;
     font-weight: 600;
     padding: 0px 20px;
 }
 
 QPushButton#PrimaryButton:hover {
-    background-color: #1D4ED8;
+    background-color: $primary_hover_bg;
     border-color: #60A5FA;
 }
 
 QPushButton#PrimaryButton:pressed {
-    background-color: #1E40AF;
+    background-color: $primary_pressed_bg;
 }
 
 QPushButton#PrimaryButton:disabled {
-    background-color: #1C273F;
-    color: #64748B;
-    border-color: #23314F;
+    background-color: $primary_disabled_bg;
+    color: $primary_disabled_text;
+    border-color: $primary_disabled_border;
 }
 
 QCheckBox {
-    color: #E2E6EE;
+    color: $cb_text;
     spacing: 8px;
     font-size: 13px;
 }
@@ -200,27 +302,39 @@ QCheckBox::indicator {
     height: 16px;
 }
 
+QCheckBox::indicator:unchecked {
+    background-color: $cb_unchecked_bg;
+    border: 1px solid $cb_unchecked_border;
+    border-radius: 3px;
+}
+
 QProgressBar {
-    background-color: #1E232E;
+    background-color: $pb_track;
     border: none;
     border-radius: 3px;
 }
 
 QProgressBar::chunk {
-    background-color: #3B82F6;
+    background-color: $pb_chunk;
     border-radius: 3px;
 }
 
 QTextEdit#ConsoleLog {
-    background-color: #090B0E;
-    color: #A6B1C4;
-    border: 1px solid #202530;
+    background-color: $console_bg;
+    color: $console_text;
+    border: 1px solid $console_border;
     border-radius: 8px;
     font-family: 'Cascadia Code', 'Consolas', 'Courier New', monospace;
     font-size: 12px;
     padding: 8px 10px;
 }
-"""
+""")
+
+
+def build_studio_stylesheet(theme: str) -> str:
+    """Builds the studio stylesheet for the requested theme ('dark' or 'light')."""
+    tokens = THEME_TOKENS["light" if theme == "light" else "dark"]
+    return _STUDIO_QSS_TEMPLATE.substitute(tokens)
 
 
 def _get_default_output_dir() -> Path:
@@ -230,34 +344,42 @@ def _get_default_output_dir() -> Path:
     return Path.cwd() / "output"
 
 
-def apply_studio_theme(app: QApplication) -> None:
-    """Applies Fusion style and dark Antigravity/Codex palette to the application."""
+def apply_studio_theme(app: QApplication, theme: str = "dark") -> None:
+    """Applies Fusion style and dark/light Antigravity/Codex palette to the application."""
+    tokens = THEME_TOKENS["light" if theme == "light" else "dark"]
     app.setStyle("Fusion")
     palette = QPalette()
-    palette.setColor(QPalette.ColorRole.Window, QColor("#0D0F13"))
-    palette.setColor(QPalette.ColorRole.WindowText, QColor("#E5E7EB"))
-    palette.setColor(QPalette.ColorRole.Base, QColor("#1C202B"))
-    palette.setColor(QPalette.ColorRole.AlternateBase, QColor("#151821"))
-    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor("#151821"))
-    palette.setColor(QPalette.ColorRole.ToolTipText, QColor("#E5E7EB"))
-    palette.setColor(QPalette.ColorRole.Text, QColor("#F3F4F6"))
-    palette.setColor(QPalette.ColorRole.Button, QColor("#1C202B"))
-    palette.setColor(QPalette.ColorRole.ButtonText, QColor("#E5E7EB"))
+    palette.setColor(QPalette.ColorRole.Window, QColor(tokens["bg_canvas"]))
+    palette.setColor(QPalette.ColorRole.WindowText, QColor(tokens["text_primary"]))
+    palette.setColor(QPalette.ColorRole.Base, QColor(tokens["qpal_base"]))
+    palette.setColor(QPalette.ColorRole.AlternateBase, QColor(tokens["bg_card"]))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(tokens["bg_card"]))
+    palette.setColor(QPalette.ColorRole.ToolTipText, QColor(tokens["text_primary"]))
+    palette.setColor(QPalette.ColorRole.Text, QColor(tokens["text_strong"]))
+    palette.setColor(QPalette.ColorRole.Button, QColor(tokens["btn_bg"]))
+    palette.setColor(QPalette.ColorRole.ButtonText, QColor(tokens["text_primary"]))
     palette.setColor(QPalette.ColorRole.Highlight, QColor("#2563EB"))
     palette.setColor(QPalette.ColorRole.HighlightedText, QColor("#FFFFFF"))
-    palette.setColor(QPalette.ColorRole.PlaceholderText, QColor("#646D80"))
+    palette.setColor(QPalette.ColorRole.PlaceholderText, QColor(tokens["qpal_placeholder"]))
+    if theme == "light":
+        palette.setColor(QPalette.ColorRole.Mid, QColor("#94A3B8"))
+        palette.setColor(QPalette.ColorRole.Dark, QColor("#64748B"))
+        palette.setColor(QPalette.ColorRole.Light, QColor("#FFFFFF"))
+    else:
+        palette.setColor(QPalette.ColorRole.Mid, QColor("#3A4252"))
+        palette.setColor(QPalette.ColorRole.Dark, QColor("#2D3342"))
+        palette.setColor(QPalette.ColorRole.Light, QColor("#242934"))
     app.setPalette(palette)
 
 
-def _enable_windows_dark_titlebar(window: QMainWindow) -> None:
-    """Requests Windows 10/11 dark titlebar frame via DWM API when available."""
+def _set_windows_titlebar_dark(window: QMainWindow, is_dark: bool) -> None:
+    """Requests Windows 10/11 dark or light titlebar frame via DWM API when available."""
     if sys.platform != "win32":
         return
     try:
         hwnd = int(window.winId())
-        value = ctypes.c_int(1)
+        value = ctypes.c_int(1 if is_dark else 0)
         dwmapi = ctypes.windll.dwmapi
-        # Attribute 20 on Windows 11 / 20H1+, fallback attribute 19 on older Win10 builds
         res = dwmapi.DwmSetWindowAttribute(hwnd, 20, ctypes.byref(value), ctypes.sizeof(value))
         if res != 0:
             dwmapi.DwmSetWindowAttribute(hwnd, 19, ctypes.byref(value), ctypes.sizeof(value))
@@ -268,16 +390,19 @@ def _enable_windows_dark_titlebar(window: QMainWindow) -> None:
 class MainWindow(QMainWindow):
     """Main application window for EGISSO -> ECP migration tool."""
 
-    def __init__(self) -> None:
+    def __init__(self, initial_theme: str | None = None) -> None:
         super().__init__()
         self.setWindowTitle("EGISSO → ГИС ЕЦП (ЛК РСМСЗ)")
         self.resize(840, 720)
         self.setMinimumSize(700, 600)
-        self.setStyleSheet(STUDIO_STYLESHEET)
+
+        self.settings = QSettings("egisso-to-ecp", "EGISSO_to_ECP")
+        saved_theme = initial_theme or str(self.settings.value("ui/theme", "dark"))
+        self.current_theme = "light" if saved_theme == "light" else "dark"
 
         self.worker: ConversionWorker | None = None
         self._init_ui()
-        _enable_windows_dark_titlebar(self)
+        self.apply_theme(self.current_theme)
 
     def _init_ui(self) -> None:
         central_widget = QWidget()
@@ -308,13 +433,19 @@ class MainWindow(QMainWindow):
         title_line.addStretch()
 
         subtitle_label = QLabel(
-            "Конвертация исторических сведений о решениях ЛК РСМСЗ · 107 столбцов · ФЛК · UTF-8 BOM / XLSX"
+            "Пакеты сведений ЛК РСМСЗ · 107 столбцов · ФЛК · UTF-8 BOM"
         )
         subtitle_label.setObjectName("HeaderSubtitle")
 
         title_block.addLayout(title_line)
         title_block.addWidget(subtitle_label)
         header_row.addLayout(title_block, stretch=1)
+
+        self.btn_theme = QPushButton("☀ Светлая тема")
+        self.btn_theme.setObjectName("SubtleButton")
+        self.btn_theme.setFixedHeight(32)
+        self.btn_theme.clicked.connect(self._toggle_theme)
+        header_row.addWidget(self.btn_theme, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         btn_about = QPushButton("О программе и лицензии")
         btn_about.setObjectName("SubtleButton")
@@ -482,6 +613,22 @@ class MainWindow(QMainWindow):
 
         main_layout.addLayout(bottom_bar)
 
+    def apply_theme(self, theme: str) -> None:
+        """Applies dark or light theme across palette, QSS, and Windows titlebar."""
+        self.current_theme = "light" if theme == "light" else "dark"
+        is_dark = self.current_theme == "dark"
+        app = QApplication.instance()
+        if isinstance(app, QApplication):
+            apply_studio_theme(app, self.current_theme)
+        self.setStyleSheet(build_studio_stylesheet(self.current_theme))
+        _set_windows_titlebar_dark(self, is_dark)
+        self.btn_theme.setText("☀ Светлая тема" if is_dark else "☾ Тёмная тема")
+        self.settings.setValue("ui/theme", self.current_theme)
+
+    def _toggle_theme(self) -> None:
+        next_theme = "light" if self.current_theme == "dark" else "dark"
+        self.apply_theme(next_theme)
+
     def _show_license_dialog(self) -> None:
         QMessageBox.information(self, "О программе и лицензии (MIT)", LICENSE_AND_DISCLAIMER_TEXT)
 
@@ -593,7 +740,6 @@ def run_gui() -> None:
     app = QApplication.instance()
     if not isinstance(app, QApplication):
         app = QApplication(sys.argv)
-    apply_studio_theme(app)
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
