@@ -150,12 +150,13 @@ def build_package_rows(package: EcpPackage) -> list[list[str]]:
         if dec.patronymic:
             dec_row[COL_INDEX["Решение_Получатель_ФИО_Отчество"]] = dec.patronymic
         dec_row[COL_INDEX["Решение_Получатель_ДатаРождения"]] = dec.birth_date
-        dec_row[COL_INDEX["Решение_РеквизитыРешения_НомерРешения"]] = dec.reason_num or dec.id_decision[:12]
+        dec_row[COL_INDEX["Решение_РеквизитыРешения_НомерРешения"]] = dec.reason_num or dec.id_decision
         dec_row[COL_INDEX["Решение_РеквизитыРешения_ДатаРешения"]] = dec.decision_date
         dec_row[COL_INDEX["Решение_РеквизитыРешения_ТехническиеДатаВремя"]] = f"{dec.decision_date}T10:00:00"
         dec_row[COL_INDEX["Решение_ОНМСЗ_ИдентификаторОНМСЗ"]] = dec.id_onmsz
         dec_row[COL_INDEX["Решение_КодМСЗ"]] = dec.code_msz or dec.id_onmsz
-        dec_row[COL_INDEX["Решение_КодЛМСЗ"]] = dec.code_lmsz or dec.id_onmsz
+        if dec.code_lmsz:
+            dec_row[COL_INDEX["Решение_КодЛМСЗ"]] = dec.code_lmsz
         dec_row[COL_INDEX["Решение_ТипДействия"]] = dec.action_type
         dec_row[COL_INDEX["Решение_СведенияОНазначении_ОснованиеРешения"]] = dec.decision_basis
         if dec.id_statement:
@@ -167,11 +168,14 @@ def build_package_rows(package: EcpPackage) -> list[list[str]]:
             dec_row[COL_INDEX["Решение_СведенияОНазначении_ИДМеры"]] = dec.id_measure
         dec_row[COL_INDEX["Решение_СведенияОНазначении_КодРегиона"]] = dec.region_code
         dec_row[COL_INDEX["Решение_СведенияОНазначении_ОКТМО"]] = dec.oktmo
-        dec_row[COL_INDEX["Решение_СведенияОНазначении_ЛМСЗ"]] = dec.code_lmsz or dec.id_onmsz
-        dec_row[COL_INDEX["Решение_СведенияОНазначении_КатегорияПолучателяЛокальная"]] = dec.id_category
-        dec_row[COL_INDEX["Решение_СведенияОНазначении_КодЛокальнойКатегории"]] = (
-            dec.local_category_code or dec.id_category
+        dec_row[COL_INDEX["Решение_СведенияОНазначении_ЛМСЗ"]] = (
+            dec.code_lmsz or dec.code_msz or dec.id_onmsz
         )
+        dec_row[COL_INDEX["Решение_СведенияОНазначении_КатегорияПолучателяЛокальная"]] = dec.id_category
+        if dec.local_category_code:
+            dec_row[COL_INDEX["Решение_СведенияОНазначении_КодЛокальнойКатегории"]] = (
+                dec.local_category_code
+            )
         dec_row[COL_INDEX["Решение_СведенияОНазначении_ПризнакИсторическихДанных"]] = (
             "true" if dec.is_historical else "false"
         )

@@ -5,6 +5,7 @@ from datetime import date, datetime
 from egisso_to_ecp.domain.normalizers import (
     clean_cell_to_str,
     extract_year_month_from_path,
+    is_uuid_str,
     normalize_amount,
     normalize_boolean_flag,
     normalize_date,
@@ -12,6 +13,7 @@ from egisso_to_ecp.domain.normalizers import (
     normalize_gender,
     normalize_measury_code,
     normalize_oktmo,
+    normalize_onmsz_id,
     normalize_snils,
 )
 
@@ -177,3 +179,14 @@ class TestOtherNormalizers:
         assert normalize_form_code("01") == "1"
         assert normalize_form_code("02") == "2"
         assert normalize_form_code("Денежная") == "1"
+
+    def test_is_uuid_str(self) -> None:
+        assert is_uuid_str("88e2558c-7d6a-42e5-94c8-af9e8444d6c1") is True
+        assert is_uuid_str("{88e2558c-7d6a-42e5-94c8-af9e8444d6c1}") is True
+        assert is_uuid_str("6220.000001") is False
+        assert is_uuid_str(None) is False
+
+    def test_normalize_onmsz_id(self) -> None:
+        assert normalize_onmsz_id("6220.000001") == "6220000001"
+        assert normalize_onmsz_id(" 0377 ") == "0377"
+        assert normalize_onmsz_id(None) == "0"

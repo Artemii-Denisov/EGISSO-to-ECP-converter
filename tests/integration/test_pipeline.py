@@ -237,6 +237,32 @@ def test_end_to_end_conversion(tmp_path: Path) -> None:
         assert reader[4][COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_ФИО_Фамилия"]] == "Иванова"
         assert reader[4][COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_ДатаРождения"]] == "1978-02-01"
 
+    # 5. Validate XLSX structure, native types, and column widths
+    may_xlsx = [f for f in xlsx_files if "2024-05" in f.name][0]
+    wb_xlsx = openpyxl.load_workbook(may_xlsx)
+    ws_xlsx = wb_xlsx.active
+    assert ws_xlsx is not None
+    assert ws_xlsx.freeze_panes == "A2"
+    assert ws_xlsx.auto_filter.ref is not None
+
+    # Check column widths for all 107 columns
+    for col_idx in range(1, len(ECP_COLUMNS) + 1):
+        col_letter = openpyxl.utils.get_column_letter(col_idx)
+        col_width = ws_xlsx.column_dimensions[col_letter].width
+        assert col_width is not None and col_width >= 14
+
+    # Check native int/float cell types in XLSX
+    assert ws_xlsx.cell(row=2, column=COL_INDEX["КоличествоЗаписей"] + 1).value == 1
+    assert isinstance(ws_xlsx.cell(row=2, column=COL_INDEX["КоличествоЗаписей"] + 1).value, int)
+    assert ws_xlsx.cell(row=3, column=COL_INDEX["Решение_Получатель_СНИЛС"] + 1).value == 11223344595
+    assert isinstance(ws_xlsx.cell(row=3, column=COL_INDEX["Решение_Получатель_СНИЛС"] + 1).value, int)
+    assert ws_xlsx.cell(row=3, column=COL_INDEX["Решение_ОНМСЗ_ИдентификаторОНМСЗ"] + 1).value == 377
+    amt_cell = ws_xlsx.cell(row=4, column=COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_СуммаКоличество"] + 1)
+    assert amt_cell.value == 3500.0
+    assert isinstance(amt_cell.value, (int, float))
+    assert amt_cell.number_format == "0.00"
+    wb_xlsx.close()
+
 
 def test_recursive_folder_date_hint_fallback(tmp_path: Path) -> None:
     nested = tmp_path / "input" / "2024" / "08"
@@ -260,15 +286,62 @@ def test_recursive_folder_date_hint_fallback(tmp_path: Path) -> None:
     assert "2024-08" in summary.csv_files_written[0].name
 
 
-_REAL_SAMPLE = Path(__file__).resolve().parents[2] / "docs_and_samples" / "ЕГИССО соц. стипен_ИСГД..xlsx"
+_DOCS_SAMPLES = Path(__file__).resolve().parents[2] / "docs_and_samples"
+_REAL_SAMPLE = _DOCS_SAMPLES / "ЕГИССО соц. стипен_ИСГД..xlsx"
 
 
 @pytest.mark.skipif(not _REAL_SAMPLE.exists(), reason="Real sample file not present")
 def test_real_sample_file_smoke(tmp_path: Path) -> None:
     out_dir = tmp_path / "output"
-    config = ConversionConfig(input_path=_REAL_SAMPLE, output_dir=out_dir)
+    config = ConversionConfig(
+        input_path=_DOCS_SAMPLES,
+        output_dir=out_dir,
+        export_csv=True,
+        export_xlsx=True,
+    )
     summary = ConversionPipeline(config).run()
 
-    assert summary.scanned_files_count == 1
-    assert summary.parsed_records_count >= 1
-    assert summary.valid_decisions_count >= 1
+    # Template Primerzapolneniya... must be skipped without generating false errors
+    assert all("Primerzapolneniya" not in issue.file_source for issue in summary.issues)
+    assert summary.parsed_records_count == 4
+    assert summary.valid_decisions_count == 2
+    assert len(summary.csv_files_written) == 1
+    assert len(summary.xlsx_files_written) == 1
+
+    # Verify structured XLSX contents and types
+    wb = openpyxl.load_workbook(summary.xlsx_files_written[0])
+    ws = wb.active
+    assert ws is not None
+    assert ws.freeze_panes == "A2"
+
+    for col_idx in range(1, len(ECP_COLUMNS) + 1):
+        col_letter = openpyxl.utils.get_column_letter(col_idx)
+        assert ws.column_dimensions[col_letter].width >= 14
+
+    # Row 2: Base row
+    assert ws.cell(row=2, column=COL_INDEX["ПоставщикИнформации"] + 1).value == 430746
+    assert ws.cell(row=2, column=COL_INDEX["КоличествоЗаписей"] + 1).value == 2
+
+    # Rows 3 & 5: Valid decisions (Губалев, Глызарев)
+    assert ws.cell(row=3, column=COL_INDEX["Решение_Получатель_ФИО_Фамилия"] + 1).value == "Губалев"
+    assert ws.cell(row=3, column=COL_INDEX["Решение_РеквизитыРешения_НомерРешения"] + 1).value == "РЕШ-20261111-0004"
+    assert ws.cell(row=3, column=COL_INDEX["Решение_ОНМСЗ_ИдентификаторОНМСЗ"] + 1).value == 6220000001
+    assert ws.cell(row=3, column=COL_INDEX["Решение_КодЛМСЗ"] + 1).value == "88e2558c-7d6a-42e5-94c8-af9e8444d6c1"
+    id_measure_1 = ws.cell(row=3, column=COL_INDEX["Решение_СведенияОНазначении_ИДМеры"] + 1).value
+
+    assert ws.cell(row=5, column=COL_INDEX["Решение_Получатель_ФИО_Фамилия"] + 1).value == "Глызарев"
+    assert ws.cell(row=5, column=COL_INDEX["Решение_РеквизитыРешения_НомерРешения"] + 1).value == "РЕШ-20261111-0005"
+    assert ws.cell(row=5, column=COL_INDEX["Решение_ОНМСЗ_ИдентификаторОНМСЗ"] + 1).value == 6220000001
+    id_measure_2 = ws.cell(row=5, column=COL_INDEX["Решение_СведенияОНазначении_ИДМеры"] + 1).value
+
+    assert id_measure_1 != id_measure_2
+    assert id_measure_1 == ws.cell(row=3, column=COL_INDEX["Решение_ИДЗаписи"] + 1).value
+
+    # Rows 4 & 6: Period rows with native numeric types
+    amt_cell = ws.cell(row=4, column=COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_СуммаКоличество"] + 1)
+    assert isinstance(amt_cell.value, float)
+    assert amt_cell.value == 940.13
+    unit_cell = ws.cell(row=4, column=COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_ЕдИзмерения"] + 1)
+    assert isinstance(unit_cell.value, int)
+    assert unit_cell.value == 383
+    wb.close()

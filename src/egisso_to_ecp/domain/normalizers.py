@@ -10,6 +10,34 @@ from typing import Any
 # Excel epoch: 1899-12-30 (handling the famous Lotus 1-2-3 leap year bug)
 EXCEL_EPOCH = datetime(1899, 12, 30)
 
+_UUID_RE = re.compile(
+    r"^\{?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}?$"
+)
+
+
+def is_uuid_str(raw: str | None) -> bool:
+    """Checks whether the given string matches standard GUID/UUID format."""
+    if not raw:
+        return False
+    return bool(_UUID_RE.match(raw.strip()))
+
+
+def normalize_onmsz_id(raw: Any) -> str:
+    """
+    Normalizes ONMSZ code to a numeric integer string suitable for ECP `long` field
+    `Решение_ОНМСЗ_ИдентификаторОНМСЗ` (e.g. '6220.000001' -> '6220000001').
+    If no digits exist, returns the trimmed string or '0'.
+    """
+    if raw is None:
+        return "0"
+    raw_str = str(raw).strip()
+    if not raw_str:
+        return "0"
+    digits = re.sub(r"\D", "", raw_str)
+    if digits:
+        return digits
+    return raw_str
+
 
 def normalize_snils(raw: Any) -> tuple[str | None, str | None]:
     """

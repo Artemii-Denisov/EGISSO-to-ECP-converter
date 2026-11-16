@@ -44,3 +44,27 @@ def test_scanner_recursive_and_non_recursive(tmp_path: Path) -> None:
     sub_info = [r for r in results_rec if r.path == file_sub][0]
     assert sub_info.year_hint == 2024
     assert sub_info.month_hint == 5
+
+
+def test_scanner_excludes_output_dir_and_generated_reports(tmp_path: Path) -> None:
+    in_dir = tmp_path / "data"
+    out_dir = in_dir / "output"
+    out_dir.mkdir(parents=True)
+
+    src_file = in_dir / "registry.xlsx"
+    src_file.write_text("dummy")
+
+    report_file = in_dir / "errors_report.xlsx"
+    report_file.write_text("dummy")
+
+    pkg_file = in_dir / "Пакет_Решений_2026-11_uuid.xlsx"
+    pkg_file.write_text("dummy")
+
+    out_nested_file = out_dir / "custom.xlsx"
+    out_nested_file.write_text("dummy")
+
+    scanner = DirectoryScanner(recursive=True)
+    results = scanner.scan(in_dir, exclude_dir=out_dir)
+
+    assert len(results) == 1
+    assert results[0].path == src_file

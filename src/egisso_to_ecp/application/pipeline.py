@@ -55,7 +55,7 @@ class ConversionPipeline:
         # 1. Scanning
         self._log(f"Начало сканирования каталога: {self.config.input_path}")
         scanner = DirectoryScanner(recursive=self.config.recursive_search)
-        scanned_files = scanner.scan(self.config.input_path)
+        scanned_files = scanner.scan(self.config.input_path, exclude_dir=self.config.output_dir)
         summary.scanned_files_count = len(scanned_files)
 
         if not scanned_files:

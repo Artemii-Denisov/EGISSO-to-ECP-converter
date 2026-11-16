@@ -26,18 +26,37 @@ class DirectoryScanner:
     def __init__(self, recursive: bool = True) -> None:
         self.recursive = recursive
 
-    def scan(self, root_path: Path) -> list[ScannedFileInfo]:
+    def _is_ignored_file(self, path: Path, resolved_exclude: Path | None) -> bool:
+        """Checks whether a candidate file should be skipped (temp locks, outputs, exclude_dir)."""
+        if path.name.startswith("~$") or path.name.startswith("."):
+            return True
+        if path.name == "errors_report.xlsx" or (
+            path.name.startswith("Пакет_Решений_") and path.suffix.lower() == ".xlsx"
+        ):
+            return True
+        if resolved_exclude is not None:
+            try:
+                if path.resolve().is_relative_to(resolved_exclude):
+                    return True
+            except OSError:
+                pass
+        return False
+
+    def scan(self, root_path: Path, exclude_dir: Path | None = None) -> list[ScannedFileInfo]:
         """
         Scans root_path for supported Excel files.
-        Ignores temporary Excel files (starting with ~$ and dot-files).
+        Ignores temporary Excel files, generated ECP outputs/reports, and files inside exclude_dir.
         """
         if not root_path.exists():
             raise FileNotFoundError(f"Каталог не найден: {root_path}")
 
+        resolved_exclude = exclude_dir.resolve() if exclude_dir is not None else None
         results: list[ScannedFileInfo] = []
 
         if root_path.is_file():
-            if root_path.suffix.lower() in SUPPORTED_EXTENSIONS and not root_path.name.startswith("~"):
+            if root_path.suffix.lower() in SUPPORTED_EXTENSIONS and not self._is_ignored_file(
+                root_path, resolved_exclude
+            ):
                 hint = extract_year_month_from_path(str(root_path))
                 y_hint, m_hint = hint if hint else (None, None)
                 results.append(ScannedFileInfo(path=root_path, year_hint=y_hint, month_hint=m_hint))
@@ -50,8 +69,7 @@ class DirectoryScanner:
         for p in pattern_generator:
             if not p.is_file():
                 continue
-            # Ignore Excel temporary lock files or hidden files
-            if p.name.startswith("~$") or p.name.startswith("."):
+            if self._is_ignored_file(p, resolved_exclude):
                 continue
 
             if p.suffix.lower() in SUPPORTED_EXTENSIONS:

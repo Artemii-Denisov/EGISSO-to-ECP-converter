@@ -46,6 +46,35 @@ class TestFlkRules:
         assert len(decision.periods) == 1
         assert decision.periods[0].amount == "5000.00"
         assert decision.periods[0].measury_code == "383"
+        assert decision.id_measure == decision.id_decision
+        assert decision.id_onmsz == "0377"
+        assert decision.reason_num == "FACT-001"
+
+    def test_uuid_measure_and_generated_decision_num(self) -> None:
+        cfg = ConversionConfig(input_path=Path("."), output_dir=Path("."))
+        rec = OldEgissoRecord(
+            file_source="sample.xlsx",
+            row_index=4,
+            lmsz_id="88e2558c-7d6a-42e5-94c8-af9e8444d6c1",
+            category_id="d534a0cc-c323-4845-b18f-00ea013493bb",
+            onmsz_code="6220.000001",
+            snils_recip="11223344595",
+            family_name_recip="Иванов",
+            name_recip="Иван",
+            birth_date_recip="2000-01-15",
+            decision_date="2026-11-11",
+            date_start="2026-11-06",
+            amount=940.13,
+        )
+        decision, issues = validate_and_convert_record(rec, cfg)
+        assert decision is not None
+        assert decision.id_onmsz == "6220000001"
+        assert decision.code_msz == "6220000001"
+        assert decision.reason_num == "РЕШ-20261111-0004"
+        assert decision.id_measure == decision.id_decision
+        assert decision.code_lmsz == "88e2558c-7d6a-42e5-94c8-af9e8444d6c1"
+        assert decision.local_category_code == "d534a0cc-c323-4845-b18f-00ea013493bb"
+        assert not [i for i in issues if i.severity.value == "ERROR"]
 
     def test_invalid_snils_blocks_decision(self) -> None:
         cfg = ConversionConfig(input_path=Path("."), output_dir=Path("."))

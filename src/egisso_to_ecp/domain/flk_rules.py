@@ -15,6 +15,7 @@ from egisso_to_ecp.domain.models import (
     ValidationSeverity,
 )
 from egisso_to_ecp.domain.normalizers import (
+    is_uuid_str,
     normalize_amount,
     normalize_boolean_flag,
     normalize_date,
@@ -22,6 +23,7 @@ from egisso_to_ecp.domain.normalizers import (
     normalize_gender,
     normalize_measury_code,
     normalize_oktmo,
+    normalize_onmsz_id,
     normalize_snils,
 )
 
@@ -357,7 +359,33 @@ def validate_and_convert_record(
         return None, issues
 
     # Generate deterministic or unique decision ID
-    decision_id = record.assignment_fact_uuid or record.fact_id or str(uuid.uuid4())
+    decision_id = (
+        record.assignment_fact_uuid
+        or record.fact_id
+        or str(
+            uuid.uuid5(
+                uuid.NAMESPACE_OID,
+                f"{record.file_source}:{record.row_index}:{snils}:{dec_date}:{start_date}",
+            )
+        )
+    )
+    if record.reason_num:
+        decision_num = record.reason_num
+    elif record.fact_id and not is_uuid_str(record.fact_id):
+        decision_num = record.fact_id
+    else:
+        decision_num = f"РЕШ-{dec_date.replace('-', '')}-{record.row_index:04d}"
+
+    id_onmsz = normalize_onmsz_id(onmsz_code)
+    if record.lmsz_provider_code:
+        code_msz = record.lmsz_provider_code
+    elif record.lmsz_id and not is_uuid_str(record.lmsz_id):
+        code_msz = record.lmsz_id
+    else:
+        code_msz = id_onmsz
+    code_lmsz = record.lmsz_id if is_uuid_str(record.lmsz_id) else None
+    local_category_code = category_id if is_uuid_str(category_id) else None
+
     period_id = f"{decision_id}_P1"
     region_code = oktmo[:2] if len(oktmo) >= 2 and oktmo[:2].isdigit() else config.default_region_code
 
@@ -377,7 +405,7 @@ def validate_and_convert_record(
     decision = EcpDecision(
         id_decision=decision_id,
         id_statement=None,
-        id_onmsz=onmsz_code,
+        id_onmsz=id_onmsz,
         id_category=category_id,
         snils_recipient=snils,
         family_name=f_name,
@@ -396,15 +424,15 @@ def validate_and_convert_record(
         assignment_form=assignment_form,
         periodicity="2",
         funding_source="1",
-        id_measure=record.lmsz_id or None,
+        id_measure=decision_id,
         region_code=region_code,
-        code_msz=record.lmsz_id or None,
-        code_lmsz=record.lmsz_id or None,
-        local_category_code=category_id or None,
+        code_msz=code_msz,
+        code_lmsz=code_lmsz,
+        local_category_code=local_category_code,
         reason_type=record.reason_type,
         reason_title=record.reason_title,
         reason_date=reason_date_str,
-        reason_num=record.reason_num,
+        reason_num=decision_num,
         is_historical=True,
         periods=[period],
         related_persons=related_persons,

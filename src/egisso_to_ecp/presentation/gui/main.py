@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from egisso_to_ecp.domain.models import ConversionConfig, ConversionSummary
+from egisso_to_ecp.presentation.gui.icon import create_app_icon
 from egisso_to_ecp.presentation.gui.worker import ConversionWorker
 
 APP_VERSION = "0.1.0"
@@ -393,6 +394,7 @@ class MainWindow(QMainWindow):
     def __init__(self, initial_theme: str | None = None) -> None:
         super().__init__()
         self.setWindowTitle("EGISSO → ГИС ЕЦП (ЛК РСМСЗ)")
+        self.setWindowIcon(create_app_icon())
         self.resize(840, 720)
         self.setMinimumSize(700, 600)
 
@@ -549,7 +551,8 @@ class MainWindow(QMainWindow):
         lbl_provider.setObjectName("FieldLabel")
         provider_row.addWidget(lbl_provider)
 
-        self.txt_provider = QLineEdit("430746")
+        saved_provider = str(self.settings.value("ui/provider_code", "430746"))
+        self.txt_provider = QLineEdit(saved_provider)
         self.txt_provider.setFixedHeight(36)
         self.txt_provider.setFixedWidth(180)
         self.txt_provider.setToolTip("Числовой код поставщика информации из реестра ГИС ЕЦП")
@@ -663,6 +666,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Ошибка выбора формата", "Выберите хотя бы один формат выгрузки (CSV или Excel).")
             return
 
+        provider_val = self.txt_provider.text().strip() or "430746"
+        self.settings.setValue("ui/provider_code", provider_val)
+
         config = ConversionConfig(
             input_path=Path(input_dir_str),
             output_dir=Path(output_dir_str),
@@ -670,7 +676,7 @@ class MainWindow(QMainWindow):
             split_by_months=self.cb_split_months.isChecked(),
             export_csv=self.cb_format_csv.isChecked(),
             export_xlsx=self.cb_format_xlsx.isChecked(),
-            provider_code=self.txt_provider.text().strip() or "430746",
+            provider_code=provider_val,
         )
 
         self.btn_start.setEnabled(False)
@@ -737,9 +743,15 @@ def run_gui() -> None:
     if "--version" in sys.argv:
         print(f"egisso-to-ecp {APP_VERSION}")
         return
+    if sys.platform == "win32":
+        try:
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("egisso.to.ecp.desktop.1")
+        except (AttributeError, OSError):
+            pass
     app = QApplication.instance()
     if not isinstance(app, QApplication):
         app = QApplication(sys.argv)
+    app.setWindowIcon(create_app_icon())
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
