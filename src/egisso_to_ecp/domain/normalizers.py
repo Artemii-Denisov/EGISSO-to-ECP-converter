@@ -79,6 +79,9 @@ def normalize_date(raw: Any) -> tuple[str | None, str | None]:
     if isinstance(raw, date):
         return raw.strftime("%Y-%m-%d"), None
 
+    if isinstance(raw, bool):
+        return None, "Некорректное значение даты (bool)"
+
     # Excel numeric serial date (e.g. 45300 or 45300.0)
     if isinstance(raw, (int, float)):
         try:
@@ -203,6 +206,65 @@ def normalize_measury_code(raw: Any, default_code: str = "383") -> str:
         return val.zfill(3) if len(val) <= 3 and val.isdigit() else val
 
     return default_code
+
+
+def clean_cell_to_str(raw: Any) -> str | None:
+    """Safely converts an arbitrary cell value (int, float, Decimal, str) to a stripped string or None."""
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        return "true" if raw else "false"
+    if isinstance(raw, int):
+        return str(raw)
+    if isinstance(raw, float):
+        if raw.is_integer():
+            return str(int(raw))
+        return str(raw).strip()
+    if isinstance(raw, Decimal):
+        if raw == raw.to_integral_value():
+            return str(int(raw))
+        return str(raw).strip()
+    s = str(raw).strip()
+    if not s or s.lower() == "none":
+        return None
+    return s
+
+
+def normalize_boolean_flag(raw: Any, default: bool = False) -> bool:
+    """Normalizes Excel boolean / Russian 'Да'/'Нет' / '1'/'0' values to bool."""
+    if raw is None:
+        return default
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)):
+        return bool(int(raw))
+    val = str(raw).strip().lower()
+    if val in ("true", "1", "да", "yes", "y", "+"):
+        return True
+    if val in ("false", "0", "нет", "no", "n", "-"):
+        return False
+    return default
+
+
+def normalize_form_code(raw: Any, default: str = "1") -> str:
+    """
+    Translates EGISSO FormCode ('01', '02', ...) to ECP 1-digit form code ('1' = денежная, etc.).
+    """
+    s = clean_cell_to_str(raw)
+    if not s:
+        return default
+    if s.isdigit():
+        return str(int(s))
+    low = s.lower()
+    if "денеж" in low:
+        return "1"
+    if "натур" in low:
+        return "2"
+    if "льгот" in low:
+        return "3"
+    if "услуг" in low:
+        return "4"
+    return s
 
 
 def extract_year_month_from_path(file_path: str) -> tuple[int, int] | None:

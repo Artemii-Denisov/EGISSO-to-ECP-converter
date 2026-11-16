@@ -74,7 +74,11 @@ class ConversionPipeline:
             self._report_progress(f_idx, len(scanned_files), status_msg)
             self._log(status_msg)
 
-            reader = ExcelRegistryReader(s_file.path)
+            reader = ExcelRegistryReader(
+                s_file.path,
+                year_hint=s_file.year_hint,
+                month_hint=s_file.month_hint,
+            )
             try:
                 for record in reader.read_records():
                     total_records += 1
@@ -106,6 +110,7 @@ class ConversionPipeline:
         splitter = PackageSplitter(
             provider_code=self.config.provider_code,
             split_by_months=self.config.split_by_months,
+            max_size_mb=self.config.package_size_limit_mb,
         )
         packages = splitter.split_into_packages(all_decisions)
         summary.packages_generated_count = len(packages)
@@ -123,9 +128,8 @@ class ConversionPipeline:
             xlsx_dir = self.config.output_dir / "xlsx"
             xlsx_writer = EcpExcelWriter(xlsx_dir)
             for pkg in packages:
-                written_xlsx = xls_writer.write_package(pkg) if (xls_writer := xlsx_writer) else None
-                if written_xlsx:
-                    summary.xlsx_files_written.append(written_xlsx)
+                written_xlsx = xlsx_writer.write_package(pkg)
+                summary.xlsx_files_written.append(written_xlsx)
 
         # 5. Writing Error Report
         if all_issues:

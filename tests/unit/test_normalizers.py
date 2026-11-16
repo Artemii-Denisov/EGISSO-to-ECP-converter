@@ -3,9 +3,12 @@
 from datetime import date, datetime
 
 from egisso_to_ecp.domain.normalizers import (
+    clean_cell_to_str,
     extract_year_month_from_path,
     normalize_amount,
+    normalize_boolean_flag,
     normalize_date,
+    normalize_form_code,
     normalize_gender,
     normalize_measury_code,
     normalize_oktmo,
@@ -90,7 +93,14 @@ class TestDateNormalizer:
     def test_invalid_date_string(self) -> None:
         res, err = normalize_date("not-a-date")
         assert res is None
+        assert err is not None
         assert "Неизвестный формат" in err
+
+    def test_bool_date_rejected(self) -> None:
+        res, err = normalize_date(True)
+        assert res is None
+        assert err is not None
+        assert "bool" in err
 
 
 class TestOktmoNormalizer:
@@ -148,3 +158,22 @@ class TestOtherNormalizers:
         assert normalize_measury_code("01") == "383"
         assert normalize_measury_code("руб.") == "383"
         assert normalize_measury_code("383") == "383"
+
+    def test_clean_cell_to_str_numeric_cells(self) -> None:
+        assert clean_cell_to_str(16503111144) == "16503111144"
+        assert clean_cell_to_str(45300.0) == "45300"
+        assert clean_cell_to_str(125.5) == "125.5"
+        assert clean_cell_to_str(None) is None
+        assert clean_cell_to_str("  ") is None
+
+    def test_normalize_boolean_flag(self) -> None:
+        assert normalize_boolean_flag("Да") is True
+        assert normalize_boolean_flag("true") is True
+        assert normalize_boolean_flag(1) is True
+        assert normalize_boolean_flag("Нет") is False
+        assert normalize_boolean_flag(0) is False
+
+    def test_normalize_form_code(self) -> None:
+        assert normalize_form_code("01") == "1"
+        assert normalize_form_code("02") == "2"
+        assert normalize_form_code("Денежная") == "1"

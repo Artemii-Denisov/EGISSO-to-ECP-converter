@@ -17,7 +17,15 @@ logger = logging.getLogger(__name__)
 
 # Canonical field mapping dictionary
 FIELD_ALIASES: dict[str, list[str]] = {
-    "snils_recip": ["snils_recip", "снилс_recip", "снилс", "snils", "снилсполучателя"],
+    "rec_type": ["rectype", "типзаписи"],
+    "assignment_fact_uuid": ["assignmentfactuuid", "idassignmentfact", "идфактаназначения"],
+    "fact_id": ["fact_id", "идфакта", "идентификаторфакта"],
+    "lmsz_id": ["lmszid", "мсз", "кодмсз", "ид_мсз", "идмсз"],
+    "category_id": ["categoryid", "категория", "идкатегории", "код_категории"],
+    "onmsz_code": ["onmszcode", "онмсз", "кодонмсз", "код_онмсз"],
+    "lmsz_provider_code": ["lmszprovidercode"],
+    "provider_code": ["providercode", "кодпоставщика"],
+    "snils_recip": ["snils_recip", "снилс_recip", "снилсполучателя", "снилс", "snils"],
     "family_name_recip": ["familyname_recip", "фамилия_recip", "фамилия", "familyname"],
     "name_recip": ["name_recip", "имя_recip", "имя", "name", "firstname"],
     "patronymic_recip": ["patronymic_recip", "отчество_recip", "отчество", "patronymic"],
@@ -26,18 +34,27 @@ FIELD_ALIASES: dict[str, list[str]] = {
     "decision_date": ["decision_date", "decisiondate", "датарешения", "дата_решения"],
     "date_start": ["datestart", "датаначала", "дата_начала", "датаназначения"],
     "date_finish": ["datefinish", "датаокончания", "дата_окончания"],
+    "using_sign": ["usingsign", "признакиспользования"],
+    "form_code": ["formcode", "формапредоставления"],
     "amount": ["amount", "сумма", "размер", "размерпособия"],
     "measury_code": ["measurycode", "единицаизмерения", "океи", "кодединицыизмерения"],
-    "onmsz_code": ["onmszcode", "онмсз", "кодонмсз", "код_онмсз"],
-    "category_id": ["categoryid", "категория", "идкатегории", "код_категории"],
-    "lmsz_id": ["lmszid", "мсз", "кодмсз", "ид_мсз", "идмсз"],
+    "monetization": ["monetization", "монетизация"],
+    "content": ["content", "содержание"],
+    "comment": ["comment", "комментарий"],
+    "equivalent_amount": ["equivalentamount", "денежныйэквивалент"],
     "oktmo": ["oktmo", "октмо"],
     "kbk": ["kbk", "кбк"],
-    "fact_id": ["fact", "fact_id", "идфакта", "идентификаторфакта"],
     "reason_type": ["reasontype", "типдокументаоснования", "виддокумента"],
     "reason_title": ["reasontitle", "наименованиедокумента"],
     "reason_date": ["reasondate", "датадокументаоснования", "датадокумента"],
     "reason_num": ["reasonnum", "номердокументаоснования", "номердокумента"],
+    "snils_reason": ["snils_reason", "снилсоснования", "снилссвязанноголица"],
+    "family_name_reason": ["familyname_reason", "фамилияоснования"],
+    "name_reason": ["name_reason", "имяоснования"],
+    "patronymic_reason": ["patronymic_reason", "отчествооснования"],
+    "gender_reason": ["gender_reason", "полоснования"],
+    "birth_date_reason": ["birthdate_reason", "датарожденияоснования"],
+    "kinship_type_code": ["kinshiptypecode", "кодродасвязи", "степеньродства"],
 }
 
 
@@ -52,8 +69,15 @@ def _clean_header(header: Any) -> str:
 class ExcelRegistryReader:
     """Reads Excel (.xlsx/.xls) registries and streams OldEgissoRecord models."""
 
-    def __init__(self, file_path: Path) -> None:
+    def __init__(
+        self,
+        file_path: Path,
+        year_hint: int | None = None,
+        month_hint: int | None = None,
+    ) -> None:
         self.file_path = file_path
+        self.year_hint = year_hint
+        self.month_hint = month_hint
 
     def read_records(self) -> Generator[OldEgissoRecord, None, None]:
         """Streams records from the first active worksheet."""
@@ -73,12 +97,33 @@ class ExcelRegistryReader:
                 raise ParsingError(f"В файле '{self.file_path.name}' нет активных листов")
 
             rows_iter = ws.iter_rows(values_only=True)
-            try:
-                raw_headers = next(rows_iter)
-            except StopIteration:
+
+            # Inspect up to the first 10 rows to locate the header row
+            initial_rows: list[tuple[int, tuple[Any, ...]]] = []
+            for idx in range(1, 11):
+                try:
+                    r = next(rows_iter)
+                except StopIteration:
+                    break
+                initial_rows.append((idx, r))
+
+            if not initial_rows:
                 return
 
-            if not raw_headers:
+            header_pos = 0
+            best_score = -1
+            for pos, (_, candidate) in enumerate(initial_rows):
+                if not any(cell is not None and str(cell).strip() != "" for cell in candidate):
+                    continue
+                score = len(self._map_columns(candidate))
+                if score > best_score:
+                    best_score = score
+                    header_pos = pos
+                if best_score >= 3:
+                    break
+
+            header_row_num, raw_headers = initial_rows[header_pos]
+            if not raw_headers or not any(cell is not None and str(cell).strip() != "" for cell in raw_headers):
                 return
 
             col_index_to_field = self._map_columns(raw_headers)
@@ -88,15 +133,21 @@ class ExcelRegistryReader:
             missing_critical = required_fields - mapped_fields
             if missing_critical:
                 logger.warning(
-                    "Файл %s: не найдены обязательные столбцы %s. Доступные заголовки: %s",
+                    "Файл %s (строка %d): не найдены обязательные столбцы %s. Доступные заголовки: %s",
                     self.file_path.name,
+                    header_row_num,
                     missing_critical,
                     raw_headers,
                 )
 
-            row_num = 1
-            for row in rows_iter:
-                row_num += 1
+            def _iter_data_rows() -> Generator[tuple[int, tuple[Any, ...]], None, None]:
+                yield from initial_rows[header_pos + 1 :]
+                next_row_num = initial_rows[-1][0]
+                for r in rows_iter:
+                    next_row_num += 1
+                    yield next_row_num, r
+
+            for row_num, row in _iter_data_rows():
                 # Skip entirely empty rows
                 if not any(cell is not None and str(cell).strip() != "" for cell in row):
                     continue
@@ -104,6 +155,8 @@ class ExcelRegistryReader:
                 record_dict: dict[str, Any] = {
                     "file_source": self.file_path.name,
                     "row_index": row_num,
+                    "year_hint": self.year_hint,
+                    "month_hint": self.month_hint,
                     "raw_extra": {},
                 }
 
@@ -129,7 +182,12 @@ class ExcelRegistryReader:
                     record = OldEgissoRecord(**record_dict)
                     yield record
                 except Exception as e:
-                    logger.debug("Пропуск строки %d в %s из-за ошибки парсинга: %e", row_num, self.file_path.name, e)
+                    logger.warning(
+                        "Ошибка парсинга строки %d в %s: %s",
+                        row_num,
+                        self.file_path.name,
+                        e,
+                    )
         finally:
             wb.close()
 
@@ -160,8 +218,10 @@ class ExcelRegistryReader:
             for idx, h_clean in enumerate(cleaned_headers):
                 if not h_clean or idx in mapping:
                     continue
-                # Special case: don't match short 'name' into 'familyname'
-                if canonical_name == "name_recip" and "family" in h_clean:
+                # Avoid cross-matching recip vs reason or name inside familyname
+                if canonical_name.endswith("_recip") and "reason" in h_clean:
+                    continue
+                if canonical_name in ("name_recip", "name_reason") and "family" in h_clean:
                     continue
                 for c_alias in cleaned_aliases:
                     if c_alias in h_clean:

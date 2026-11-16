@@ -4,6 +4,7 @@ import csv
 from pathlib import Path
 
 import openpyxl
+import pytest
 
 from egisso_to_ecp.application.pipeline import ConversionPipeline
 from egisso_to_ecp.domain.models import ConversionConfig
@@ -11,13 +12,15 @@ from egisso_to_ecp.infrastructure.writers.ecp_schema import COL_INDEX, ECP_COLUM
 
 
 def create_test_registry(file_path: Path) -> None:
-    """Creates a sample EGISSO registry with realistic test records."""
+    """Creates a sample EGISSO registry with realistic numeric and string test records."""
     wb = openpyxl.Workbook()
     ws = wb.active
+    assert ws is not None
     ws.title = "Sheet1"
 
     headers = [
-        "Fact",
+        "RecType",
+        "assignmentFactUuid",
         "LMSZID",
         "categoryID",
         "ONMSZCode",
@@ -30,23 +33,31 @@ def create_test_registry(file_path: Path) -> None:
         "decision_date",
         "dateStart",
         "dateFinish",
+        "FormCode",
         "amount",
         "measuryCode",
+        "monetization",
+        "comment",
         "reasonType",
         "reasonTitle",
         "reasonDate",
         "reasonNum",
         "OKTMO",
+        "SNILS_reason",
+        "FamilyName_reason",
+        "Name_reason",
+        "BirthDate_reason",
     ]
     ws.append(headers)
 
-    # Row 1: Valid record (May 2024)
+    # Row 1: Valid record (May 2024) with numeric SNILS & OKTMO and a related person
     ws.append([
+        "Fact",
         "FACT-001",
         "0377",
         "101",
         "0377",
-        "112-233-445 95",
+        11223344595,
         "Иванов",
         "Иван",
         "Иванович",
@@ -55,17 +66,25 @@ def create_test_registry(file_path: Path) -> None:
         "2024-05-15",
         "2024-05-01",
         "2024-05-31",
+        "01",
         "3500.00",
         "01",
+        "Нет",
+        "Выплата за май",
         "Приказ",
         "О назначении стипендии",
         "2024-05-10",
         "123-ОД",
-        "62701000001",
+        62701000001,
+        "112-233-445 95",
+        "Иванова",
+        "Мария",
+        "1978-02-01",
     ])
 
     # Row 2: Valid record (June 2024)
     ws.append([
+        "Fact",
         "FACT-002",
         "0377",
         "101",
@@ -79,17 +98,25 @@ def create_test_registry(file_path: Path) -> None:
         "2024-06-10",
         "2024-06-01",
         "2024-06-30",
+        "01",
         "4200.50",
         "руб.",
+        False,
+        None,
         "Приказ",
         "О назначении стипендии",
         "2024-06-05",
         "145-ОД",
         "62701000001",
+        None,
+        None,
+        None,
+        None,
     ])
 
     # Row 3: Invalid record (Invalid SNILS checksum)
     ws.append([
+        "Fact",
         "FACT-003",
         "0377",
         "101",
@@ -103,13 +130,20 @@ def create_test_registry(file_path: Path) -> None:
         "2024-06-15",
         "2024-06-01",
         "2024-06-30",
+        "01",
         "3000.00",
         "01",
+        None,
+        None,
         "Приказ",
         "О назначении",
         "2024-06-10",
         "150-ОД",
         "62701000001",
+        None,
+        None,
+        None,
+        None,
     ])
 
     wb.save(file_path)
@@ -175,15 +209,66 @@ def test_end_to_end_conversion(tmp_path: Path) -> None:
         assert reader[1][COL_INDEX["ИДПакета"]] != ""
         assert reader[1][COL_INDEX["КоличествоЗаписей"]] == "1"
 
-        # Row 3: Decision row
+        # Row 3: Parent decision row (nested repeating blocks must remain empty)
         assert reader[2][COL_INDEX["Решение_ИДЗаписи"]] == "FACT-001"
+        assert reader[2][COL_INDEX["Решение_ТипДокумента"]] == "3"
+        assert reader[2][COL_INDEX["Решение_ТипДействия"]] == "1"
         assert reader[2][COL_INDEX["Решение_Получатель_СНИЛС"]] == "11223344595"
         assert reader[2][COL_INDEX["Решение_Получатель_ФИО_Фамилия"]] == "Иванов"
         assert reader[2][COL_INDEX["Решение_Получатель_ФИО_Имя"]] == "Иван"
         assert reader[2][COL_INDEX["Решение_Получатель_ДатаРождения"]] == "2002-04-12"
         assert reader[2][COL_INDEX["Решение_СведенияОНазначении_ОКТМО"]] == "62701000001"
         assert reader[2][COL_INDEX["Решение_СведенияОНазначении_ПризнакИсторическихДанных"]] == "true"
-        assert reader[2][COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_СуммаКоличество"]] == "3500.00"
-        assert reader[2][COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_ЕдИзмерения"]] == "383"
-        assert reader[2][COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_ДатаС"]] == "2024-05-01"
-        assert reader[2][COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_ДатаПо"]] == "2024-05-31"
+        assert reader[2][COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_СуммаКоличество"]] == ""
+        assert reader[2][COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_СНИЛС"]] == ""
+
+        # Row 4: Child ПериодыНазначения row
+        assert reader[3][COL_INDEX["Решение_ИДЗаписи"]] == ""
+        assert reader[3][COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_СуммаКоличество"]] == "3500.00"
+        assert reader[3][COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_ЕдИзмерения"]] == "383"
+        assert reader[3][COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_ДатаС"]] == "2024-05-01"
+        assert reader[3][COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_ДатаПо"]] == "2024-05-31"
+        assert reader[3][COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_ПризнакМонетизации"]] == "false"
+        assert reader[3][COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_Комментарий"]] == "Выплата за май"
+
+        # Row 5: Child СвязанноеЛицо row
+        assert reader[4][COL_INDEX["Решение_ИДЗаписи"]] == ""
+        assert reader[4][COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_СНИЛС"]] == "11223344595"
+        assert reader[4][COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_ФИО_Фамилия"]] == "Иванова"
+        assert reader[4][COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_ДатаРождения"]] == "1978-02-01"
+
+
+def test_recursive_folder_date_hint_fallback(tmp_path: Path) -> None:
+    nested = tmp_path / "input" / "2024" / "08"
+    nested.mkdir(parents=True)
+    sample_file = nested / "registry.xlsx"
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.append(["LMSZID", "categoryID", "SNILS_recip", "FamilyName_recip", "Name_recip", "BirthDate_recip", "amount"])
+    ws.append(["0377", "101", 11223344595, "Смирнова", "Ольга", "1995-03-20", 1500])
+    wb.save(sample_file)
+    wb.close()
+
+    out_dir = tmp_path / "output"
+    config = ConversionConfig(input_path=tmp_path / "input", output_dir=out_dir)
+    summary = ConversionPipeline(config).run()
+
+    assert summary.valid_decisions_count == 1
+    assert len(summary.csv_files_written) == 1
+    assert "2024-08" in summary.csv_files_written[0].name
+
+
+_REAL_SAMPLE = Path(__file__).resolve().parents[2] / "docs_and_samples" / "ЕГИССО соц. стипен_ИСГД..xlsx"
+
+
+@pytest.mark.skipif(not _REAL_SAMPLE.exists(), reason="Real sample file not present")
+def test_real_sample_file_smoke(tmp_path: Path) -> None:
+    out_dir = tmp_path / "output"
+    config = ConversionConfig(input_path=_REAL_SAMPLE, output_dir=out_dir)
+    summary = ConversionPipeline(config).run()
+
+    assert summary.scanned_files_count == 1
+    assert summary.parsed_records_count >= 1
+    assert summary.valid_decisions_count >= 1

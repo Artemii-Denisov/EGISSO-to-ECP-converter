@@ -84,3 +84,71 @@ class TestFlkRules:
         decision, issues = validate_and_convert_record(rec, cfg)
         assert decision is None
         assert any(i.field_name == "FamilyName_recip" for i in issues)
+
+    def test_numeric_excel_cells_coerced(self) -> None:
+        cfg = ConversionConfig(input_path=Path("."), output_dir=Path("."))
+        rec = OldEgissoRecord(
+            file_source="sample.xlsx",
+            row_index=5,
+            lmsz_id=377,  # type: ignore[arg-type]
+            category_id=101,  # type: ignore[arg-type]
+            onmsz_code=377,  # type: ignore[arg-type]
+            snils_recip=11223344595,  # type: ignore[arg-type]
+            family_name_recip="Иванов",
+            name_recip="Иван",
+            gender_recip=1,  # type: ignore[arg-type]
+            birth_date_recip="2000-01-15",
+            decision_date="2024-05-01",
+            date_start="2024-05-01",
+            amount=3500,
+            oktmo=62701000001,  # type: ignore[arg-type]
+        )
+        decision, issues = validate_and_convert_record(rec, cfg)
+        assert decision is not None
+        assert decision.snils_recipient == "11223344595"
+        assert decision.oktmo == "62701000001"
+        assert decision.region_code == "62"
+        assert not [i for i in issues if i.severity == ValidationSeverity.ERROR]
+
+    def test_path_year_month_hint_fallback(self) -> None:
+        cfg = ConversionConfig(input_path=Path("."), output_dir=Path("."))
+        rec = make_valid_record()
+        rec.decision_date = None
+        rec.date_start = None
+        rec.date_finish = None
+        rec.year_hint = 2024
+        rec.month_hint = 7
+
+        decision, issues = validate_and_convert_record(rec, cfg)
+        assert decision is not None
+        assert decision.decision_date == "2024-07-01"
+        assert decision.date_start == "2024-07-01"
+        assert any(i.severity == ValidationSeverity.WARNING and i.field_name == "decision_date" for i in issues)
+
+    def test_related_person_valid_and_invalid(self) -> None:
+        cfg = ConversionConfig(input_path=Path("."), output_dir=Path("."))
+        rec = make_valid_record()
+        rec.snils_reason = "112-233-445 95"
+        rec.family_name_reason = "Петрова"
+        rec.name_reason = "Анна"
+        rec.birth_date_reason = "1980-03-10"
+
+        decision, issues = validate_and_convert_record(rec, cfg)
+        assert decision is not None
+        assert len(decision.related_persons) == 1
+        assert decision.related_persons[0].snils == "11223344595"
+
+        rec_bad = make_valid_record()
+        rec_bad.snils_reason = "12345"
+        rec_bad.family_name_reason = ""
+        decision_bad, bad_issues = validate_and_convert_record(rec_bad, cfg)
+        assert decision_bad is None
+        assert any(i.field_name == "SNILS_reason" and i.severity == ValidationSeverity.ERROR for i in bad_issues)
+
+    def test_future_decision_date_warning_flk29(self) -> None:
+        cfg = ConversionConfig(input_path=Path("."), output_dir=Path("."))
+        rec = make_valid_record()
+        rec.decision_date = "2099-01-01"
+        decision, issues = validate_and_convert_record(rec, cfg)
+        assert decision is not None
+        assert any("ФЛК №29" in i.message and i.severity == ValidationSeverity.WARNING for i in issues)

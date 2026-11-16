@@ -1,5 +1,12 @@
 """Official 107-column GIS ECP schema."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from egisso_to_ecp.domain.models import EcpPackage
+
 ECP_COLUMNS: tuple[str, ...] = (
     "ПоставщикИнформации",
     "ИДПакета",
@@ -111,3 +118,93 @@ ECP_COLUMNS: tuple[str, ...] = (
 )
 
 COL_INDEX: dict[str, int] = {col: idx for idx, col in enumerate(ECP_COLUMNS)}
+
+
+def build_package_rows(package: EcpPackage) -> list[list[str]]:
+    """
+    Builds the hierarchical 107-column row matrix for an EcpPackage according
+    to sections 8.1.3 & 8.1.4 of GIS ECP specification:
+      1. Header row (ECP_COLUMNS)
+      2. Package Base Row (ПоставщикИнформации, ИДПакета, КоличествоЗаписей)
+      3. For each decision:
+         - Parent Решение row (nested repeating blocks remain empty)
+         - Child ПериодыНазначения rows (one period per row)
+         - Child СвязанноеЛицо rows (one related person per row)
+    """
+    total_cols = len(ECP_COLUMNS)
+    rows: list[list[str]] = [list(ECP_COLUMNS)]
+
+    base_row = [""] * total_cols
+    base_row[COL_INDEX["ПоставщикИнформации"]] = package.provider_code
+    base_row[COL_INDEX["ИДПакета"]] = package.package_id
+    base_row[COL_INDEX["КоличествоЗаписей"]] = str(package.total_records)
+    rows.append(base_row)
+
+    for dec in package.decisions:
+        dec_row = [""] * total_cols
+        dec_row[COL_INDEX["Решение_ИДЗаписи"]] = dec.id_decision
+        dec_row[COL_INDEX["Решение_ТипДокумента"]] = dec.document_type
+        dec_row[COL_INDEX["Решение_Получатель_СНИЛС"]] = dec.snils_recipient
+        dec_row[COL_INDEX["Решение_Получатель_ФИО_Фамилия"]] = dec.family_name
+        dec_row[COL_INDEX["Решение_Получатель_ФИО_Имя"]] = dec.first_name
+        if dec.patronymic:
+            dec_row[COL_INDEX["Решение_Получатель_ФИО_Отчество"]] = dec.patronymic
+        dec_row[COL_INDEX["Решение_Получатель_ДатаРождения"]] = dec.birth_date
+        dec_row[COL_INDEX["Решение_РеквизитыРешения_НомерРешения"]] = dec.reason_num or dec.id_decision[:12]
+        dec_row[COL_INDEX["Решение_РеквизитыРешения_ДатаРешения"]] = dec.decision_date
+        dec_row[COL_INDEX["Решение_РеквизитыРешения_ТехническиеДатаВремя"]] = f"{dec.decision_date}T10:00:00"
+        dec_row[COL_INDEX["Решение_ОНМСЗ_ИдентификаторОНМСЗ"]] = dec.id_onmsz
+        dec_row[COL_INDEX["Решение_КодМСЗ"]] = dec.code_msz or dec.id_onmsz
+        dec_row[COL_INDEX["Решение_КодЛМСЗ"]] = dec.code_lmsz or dec.id_onmsz
+        dec_row[COL_INDEX["Решение_ТипДействия"]] = dec.action_type
+        dec_row[COL_INDEX["Решение_СведенияОНазначении_ОснованиеРешения"]] = dec.decision_basis
+        if dec.id_statement:
+            dec_row[COL_INDEX["Решение_СведенияОНазначении_ИДЗаявления"]] = dec.id_statement
+        dec_row[COL_INDEX["Решение_СведенияОНазначении_ФормаПредоставления"]] = dec.assignment_form
+        dec_row[COL_INDEX["Решение_СведенияОНазначении_ПериодичностьПредоставления"]] = dec.periodicity
+        dec_row[COL_INDEX["Решение_СведенияОНазначении_ИсточникФинансирования"]] = dec.funding_source
+        if dec.id_measure:
+            dec_row[COL_INDEX["Решение_СведенияОНазначении_ИДМеры"]] = dec.id_measure
+        dec_row[COL_INDEX["Решение_СведенияОНазначении_КодРегиона"]] = dec.region_code
+        dec_row[COL_INDEX["Решение_СведенияОНазначении_ОКТМО"]] = dec.oktmo
+        dec_row[COL_INDEX["Решение_СведенияОНазначении_ЛМСЗ"]] = dec.code_lmsz or dec.id_onmsz
+        dec_row[COL_INDEX["Решение_СведенияОНазначении_КатегорияПолучателяЛокальная"]] = dec.id_category
+        dec_row[COL_INDEX["Решение_СведенияОНазначении_КодЛокальнойКатегории"]] = (
+            dec.local_category_code or dec.id_category
+        )
+        dec_row[COL_INDEX["Решение_СведенияОНазначении_ПризнакИсторическихДанных"]] = (
+            "true" if dec.is_historical else "false"
+        )
+        rows.append(dec_row)
+
+        for period in dec.periods:
+            p_row = [""] * total_cols
+            p_row[COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_СуммаКоличество"]] = period.amount
+            p_row[COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_ЕдИзмерения"]] = period.measury_code
+            p_row[COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_ДатаС"]] = period.date_start
+            if period.date_finish:
+                p_row[COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_ДатаПо"]] = period.date_finish
+            p_row[COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_ДенежныйЭквивалент"]] = (
+                period.equivalent_amount or period.amount
+            )
+            if period.monetization is not None:
+                p_row[COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_ПризнакМонетизации"]] = (
+                    "true" if period.monetization else "false"
+                )
+            if period.comment:
+                p_row[COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_Комментарий"]] = period.comment
+            if period.content:
+                p_row[COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_Содержание"]] = period.content
+            rows.append(p_row)
+
+        for rp in dec.related_persons:
+            rp_row = [""] * total_cols
+            rp_row[COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_СНИЛС"]] = rp.snils
+            rp_row[COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_ФИО_Фамилия"]] = rp.family_name
+            rp_row[COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_ФИО_Имя"]] = rp.first_name
+            if rp.patronymic:
+                rp_row[COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_ФИО_Отчество"]] = rp.patronymic
+            rp_row[COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_ДатаРождения"]] = rp.birth_date
+            rows.append(rp_row)
+
+    return rows

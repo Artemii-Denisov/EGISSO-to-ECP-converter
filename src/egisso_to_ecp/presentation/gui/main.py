@@ -6,7 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QCloseEvent, QFont
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -119,24 +119,6 @@ QPushButton#PrimaryButton:disabled {
 QCheckBox {
     spacing: 8px;
     font-size: 13px;
-}
-
-QCheckBox::indicator {
-    width: 18px;
-    height: 18px;
-    border-radius: 4px;
-    border: 1px solid #8A8A8A;
-    background-color: #FFFFFF;
-}
-
-QCheckBox::indicator:hover {
-    border-color: #0067C0;
-}
-
-QCheckBox::indicator:checked {
-    background-color: #0067C0;
-    border-color: #0067C0;
-    image: url("");
 }
 
 QProgressBar {
@@ -261,7 +243,7 @@ class MainWindow(QMainWindow):
 
         # Provider Code
         options_layout.addWidget(QLabel("Код поставщика (ПоставщикИнформации):"), 2, 0)
-        self.txt_provider = QLineEdit("PFR001")
+        self.txt_provider = QLineEdit("430746")
         self.txt_provider.setToolTip("Идентификатор поставщика информации из реестра РУВ")
         options_layout.addWidget(self.txt_provider, 2, 1)
 
@@ -335,7 +317,7 @@ class MainWindow(QMainWindow):
             split_by_months=self.cb_split_months.isChecked(),
             export_csv=self.cb_format_csv.isChecked(),
             export_xlsx=self.cb_format_xlsx.isChecked(),
-            provider_code=self.txt_provider.text().strip() or "PFR001",
+            provider_code=self.txt_provider.text().strip() or "430746",
         )
 
         self.btn_start.setEnabled(False)
@@ -383,6 +365,18 @@ class MainWindow(QMainWindow):
         self.btn_open_folder.setEnabled(True)
         self.lbl_status.setText("Произошла ошибка при выполнении")
         QMessageBox.critical(self, "Ошибка выполнения", f"Произошла ошибка:\n{error_message}")
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        """Prevents window destruction while background worker thread is running."""
+        if self.worker is not None and self.worker.isRunning():
+            QMessageBox.warning(
+                self,
+                "Обработка не завершена",
+                "Дождитесь завершения текущей конвертации перед закрытием окна.",
+            )
+            event.ignore()
+            return
+        event.accept()
 
 
 def run_gui() -> None:

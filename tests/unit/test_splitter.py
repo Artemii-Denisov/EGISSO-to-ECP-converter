@@ -75,3 +75,29 @@ class TestPackageSplitter:
         assert packages[0].year_month == "2024-05_1"
         assert packages[1].year_month == "2024-05_2"
         assert packages[2].year_month == "2024-05_3"
+
+    def test_mixed_measures_grouped_in_single_monthly_package(self) -> None:
+        decisions = [
+            make_decision("1", "2024-05-10", measure="0377"),
+            make_decision("2", "2024-05-20", measure="0410"),
+        ]
+        splitter = PackageSplitter(provider_code="430746", split_by_months=True)
+        packages = splitter.split_into_packages(decisions)
+
+        assert len(packages) == 1
+        assert packages[0].year_month == "2024-05"
+        assert packages[0].measure_code == "ALL"
+        assert packages[0].total_records == 2
+
+    def test_chunking_by_max_size_mb(self) -> None:
+        decisions = [make_decision(f"ID-{i}-{'X' * 100}", "2024-05-10") for i in range(10)]
+        # Very tiny size limit (~5 KB) to force splitting despite max_records_per_chunk=100
+        splitter = PackageSplitter(
+            provider_code="430746",
+            split_by_months=True,
+            max_records_per_chunk=100,
+            max_size_mb=5 / 1024,
+        )
+        packages = splitter.split_into_packages(decisions)
+        assert len(packages) > 1
+        assert sum(p.total_records for p in packages) == 10
