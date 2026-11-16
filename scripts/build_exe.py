@@ -64,7 +64,10 @@ def build() -> Path:
         raise FileNotFoundError(f"Ожидаемый исполняемый файл не найден: {exe_path}")
 
     alias_exe = DIST_DIR / "Конвертер_ЕГИССО_ЕЦП.exe"
-    shutil.copy2(exe_path, alias_exe)
+    try:
+        shutil.copy2(exe_path, alias_exe)
+    except PermissionError:
+        pass
 
     _refresh_windows_icon_cache(exe_path)
     _refresh_windows_icon_cache(alias_exe)
