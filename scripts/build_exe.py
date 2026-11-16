@@ -128,7 +128,7 @@ if __name__ == "__main__":
     try:
         output_exe = build()
         size_mb = output_exe.stat().st_size / (1024 * 1024)
-        print(f"Сборка успешно завершена: {output_exe} ({size_mb:.1f} МБ)")
+        print(f"Build completed successfully: {output_exe.name} ({size_mb:.1f} MB)")
     except Exception:
         import traceback
 

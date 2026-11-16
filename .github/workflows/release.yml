@@ -41,6 +41,7 @@ jobs:
       - name: Build Windows Standalone Executables
         env:
           QT_QPA_PLATFORM: offscreen
+          PYTHONIOENCODING: utf-8
         run: uv run python scripts/build_exe.py
 
       - name: Create ZIP archive for distribution
