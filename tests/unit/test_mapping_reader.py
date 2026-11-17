@@ -8,6 +8,8 @@ from pathlib import Path
 from egisso_to_ecp.domain.flk_rules import find_matching_rule
 from egisso_to_ecp.domain.models import LmszMappingRule, OldEgissoRecord
 from egisso_to_ecp.infrastructure.readers.mapping_reader import (
+    create_mapping_template_csv,
+    create_mapping_template_excel,
     load_mapping_file,
     load_mapping_json,
     save_mapping_csv,
@@ -160,3 +162,30 @@ def test_find_matching_rule_priorities() -> None:
     m4 = find_matching_rule(rec4, rules)
     assert m4 is not None
     assert m4.lmsz_code == "1"
+
+
+def test_create_mapping_template_excel(tmp_path: Path) -> None:
+    tpl_path = tmp_path / "Шаблон_сопоставления_мер_ЕЦП.xlsx"
+    res = create_mapping_template_excel(tpl_path)
+    assert res == tpl_path
+    assert tpl_path.exists()
+    assert tpl_path.stat().st_size > 1000
+
+    # Ensure it can be loaded by the mapping reader
+    loaded = load_mapping_file(tpl_path)
+    assert len(loaded) == 3
+    assert loaded[0].lmsz_uuid == "88e2558c-7d6a-42e5-94c8-af9e8444d6c1"
+    assert loaded[0].lmsz_code == "1"
+    assert "стипендия" in loaded[0].lmsz_name
+
+
+def test_create_mapping_template_csv(tmp_path: Path) -> None:
+    tpl_path = tmp_path / "Шаблон_сопоставления_мер_ЕЦП.csv"
+    res = create_mapping_template_csv(tpl_path)
+    assert res == tpl_path
+    assert tpl_path.exists()
+
+    loaded = load_mapping_file(tpl_path)
+    assert len(loaded) == 3
+    assert loaded[0].lmsz_uuid == "88e2558c-7d6a-42e5-94c8-af9e8444d6c1"
+

@@ -40,6 +40,8 @@ from egisso_to_ecp.domain.models import (
     LmszMappingRule,
 )
 from egisso_to_ecp.infrastructure.readers.mapping_reader import (
+    create_mapping_template_csv,
+    create_mapping_template_excel,
     load_mapping_file,
     load_mapping_json,
     save_mapping_csv,
@@ -50,7 +52,7 @@ from egisso_to_ecp.presentation.gui.worker import ConversionWorker
 
 logger = logging.getLogger(__name__)
 
-APP_VERSION = "0.1.3"
+APP_VERSION = "0.1.4"
 
 LICENSE_AND_DISCLAIMER_TEXT = """Лицензия на бесплатное использование (MIT) и отказ от ответственности
 
@@ -527,7 +529,7 @@ class MainWindow(QMainWindow):
         title_block.addWidget(subtitle_label)
         header_row.addLayout(title_block, stretch=1)
 
-        self.btn_theme = QPushButton("☀ Светлая тема")
+        self.btn_theme = QPushButton("Светлая тема")
         self.btn_theme.setObjectName("SubtleButton")
         self.btn_theme.setFixedHeight(32)
         self.btn_theme.clicked.connect(self._toggle_theme)
@@ -548,8 +550,8 @@ class MainWindow(QMainWindow):
         convert_tab = self._create_convert_tab()
         mapping_tab = self._create_mapping_tab()
 
-        self.tab_widget.addTab(convert_tab, "⚡ Конвертация")
-        self.tab_widget.addTab(mapping_tab, "📋 Справочник мер и категорий (Маппинг)")
+        self.tab_widget.addTab(convert_tab, "Конвертация")
+        self.tab_widget.addTab(mapping_tab, "Сопоставление мер и категорий")
 
         main_layout.addWidget(self.tab_widget, stretch=1)
 
@@ -835,57 +837,73 @@ class MainWindow(QMainWindow):
         layout.addWidget(info_card)
 
         # Toolbar
-        toolbar = QHBoxLayout()
-        toolbar.setSpacing(8)
+        toolbar_container = QVBoxLayout()
+        toolbar_container.setSpacing(8)
+
+        # Row 1: Search & File actions
+        row1 = QHBoxLayout()
+        row1.setSpacing(8)
 
         self.txt_mapping_filter = QLineEdit()
         self.txt_mapping_filter.setFixedHeight(34)
-        self.txt_mapping_filter.setPlaceholderText("🔍 Поиск по названию меры, категории или коду…")
+        self.txt_mapping_filter.setMinimumWidth(300)
+        self.txt_mapping_filter.setPlaceholderText("Поиск по наименованию меры, категории или коду…")
         self.txt_mapping_filter.textChanged.connect(self._filter_mapping_table)
-        toolbar.addWidget(self.txt_mapping_filter, stretch=1)
+        row1.addWidget(self.txt_mapping_filter, stretch=1)
 
-        btn_load = QPushButton("📂 Загрузить из файла…")
+        btn_load = QPushButton("Загрузить из файла…")
         btn_load.setFixedHeight(34)
+        btn_load.setToolTip("Загрузить таблицу сопоставления из файла Excel (.xlsx) или CSV")
         btn_load.clicked.connect(self._browse_mapping_file)
-        toolbar.addWidget(btn_load)
+        row1.addWidget(btn_load)
 
-        btn_add = QPushButton("➕ Добавить")
-        btn_add.setFixedHeight(34)
-        btn_add.clicked.connect(self._add_empty_mapping_row)
-        toolbar.addWidget(btn_add)
+        btn_template = QPushButton("Скачать шаблон…")
+        btn_template.setFixedHeight(34)
+        btn_template.setToolTip("Сохранить типовой шаблон Excel (.xlsx) или CSV для заполнения кодов сопоставления")
+        btn_template.clicked.connect(self._download_mapping_template)
+        row1.addWidget(btn_template)
 
-        btn_del = QPushButton("🗑️ Удалить")
-        btn_del.setFixedHeight(34)
-        btn_del.clicked.connect(self._delete_selected_mapping_row)
-        toolbar.addWidget(btn_del)
-
-        btn_export = QPushButton("💾 Экспорт в CSV")
+        btn_export = QPushButton("Экспорт в CSV")
         btn_export.setFixedHeight(34)
+        btn_export.setToolTip("Экспортировать текущую таблицу сопоставления в CSV файл")
         btn_export.clicked.connect(self._export_mapping_csv)
-        toolbar.addWidget(btn_export)
+        row1.addWidget(btn_export)
 
-        btn_sample = QPushButton("⭐ Образец (Карелия)")
-        btn_sample.setFixedHeight(34)
-        btn_sample.setToolTip("Загрузить типовой справочник на 14 мер Республики Карелия")
-        btn_sample.clicked.connect(self._load_sample_karelia_rules)
-        toolbar.addWidget(btn_sample)
+        toolbar_container.addLayout(row1)
 
-        btn_clear = QPushButton("🧹 Очистить")
-        btn_clear.setFixedHeight(34)
+        # Row 2: Table editing actions
+        row2 = QHBoxLayout()
+        row2.setSpacing(8)
+
+        btn_add = QPushButton("Добавить строку")
+        btn_add.setFixedHeight(32)
+        btn_add.clicked.connect(self._add_empty_mapping_row)
+        row2.addWidget(btn_add)
+
+        btn_del = QPushButton("Удалить выбранную")
+        btn_del.setFixedHeight(32)
+        btn_del.clicked.connect(self._delete_selected_mapping_row)
+        row2.addWidget(btn_del)
+
+        btn_clear = QPushButton("Очистить таблицу")
+        btn_clear.setFixedHeight(32)
         btn_clear.clicked.connect(self._clear_mapping_rules)
-        toolbar.addWidget(btn_clear)
+        row2.addWidget(btn_clear)
 
-        layout.addLayout(toolbar)
+        row2.addStretch()
+        toolbar_container.addLayout(row2)
+
+        layout.addLayout(toolbar_container)
 
         # Table
         self.table_mapping = QTableWidget()
         self.table_mapping.setColumnCount(7)
         self.table_mapping.setHorizontalHeaderLabels([
-            "UUID ЛМСЗ (Решение_КодЛМСЗ)",
-            "Код ЛМСЗ (число)",
-            "Наименование меры (ЛМСЗ)",
-            "UUID категории (КатегорияЛокальная)",
-            "Код категории (число)",
+            "UUID меры (ЛМСЗ)",
+            "Код ЛМСЗ",
+            "Наименование меры",
+            "UUID категории",
+            "Код категории",
             "Наименование категории",
             "Код ОНМСЗ",
         ])
@@ -898,11 +916,11 @@ class MainWindow(QMainWindow):
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)
 
-        self.table_mapping.setColumnWidth(0, 160)
+        self.table_mapping.setColumnWidth(0, 170)
         self.table_mapping.setColumnWidth(1, 90)
-        self.table_mapping.setColumnWidth(3, 160)
-        self.table_mapping.setColumnWidth(4, 90)
-        self.table_mapping.setColumnWidth(6, 100)
+        self.table_mapping.setColumnWidth(3, 170)
+        self.table_mapping.setColumnWidth(4, 110)
+        self.table_mapping.setColumnWidth(6, 110)
 
         self.table_mapping.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_mapping.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -917,7 +935,7 @@ class MainWindow(QMainWindow):
 
         status_row.addStretch()
 
-        lbl_autosave_hint = QLabel("💡 Изменения автоматически сохраняются в mapping_rules.json")
+        lbl_autosave_hint = QLabel("Изменения автоматически сохраняются в mapping_rules.json")
         lbl_autosave_hint.setObjectName("MutedText")
         status_row.addWidget(lbl_autosave_hint)
 
@@ -988,14 +1006,6 @@ class MainWindow(QMainWindow):
             rules = load_mapping_json(storage)
             if rules:
                 self._populate_mapping_table(rules)
-                return
-
-        sample = Path("docs_and_samples/Справочник_ЛМСЗ_Карелия.csv")
-        if sample.exists():
-            rules = load_mapping_file(sample)
-            if rules:
-                self._populate_mapping_table(rules)
-                self._auto_save_mapping_rules()
 
     def _filter_mapping_table(self, query: str) -> None:
         q = query.strip().lower()
@@ -1027,6 +1037,36 @@ class MainWindow(QMainWindow):
         self._populate_mapping_table(rules)
         self._auto_save_mapping_rules()
         QMessageBox.information(self, "Успех", f"Успешно загружено {len(rules)} правил сопоставления мер и категорий.")
+
+    def _download_mapping_template(self) -> None:
+        """Saves a blank pre-formatted mapping template in XLSX or CSV format."""
+        fpath, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Сохранить шаблон сопоставления кодов",
+            "Шаблон_сопоставления_мер_ЕЦП.xlsx",
+            "Excel файлы (*.xlsx);;CSV файлы (*.csv);;Все файлы (*.*)",
+        )
+        if not fpath:
+            return
+        target = Path(fpath)
+        try:
+            if target.suffix.lower() == ".csv" or "csv" in selected_filter.lower():
+                if target.suffix.lower() != ".csv":
+                    target = target.with_suffix(".csv")
+                create_mapping_template_csv(target)
+            else:
+                if target.suffix.lower() != ".xlsx":
+                    target = target.with_suffix(".xlsx")
+                create_mapping_template_excel(target)
+            QMessageBox.information(
+                self,
+                "Шаблон сохранен",
+                f"Шаблон сопоставления успешно сохранен в:\n{target}\n\n"
+                "Заполните его вашими данными и загрузите через кнопку «Загрузить из файла…».",
+            )
+        except Exception as e:
+            logger.exception("Ошибка при создании шаблона: %s", e)
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить шаблон: {e}")
 
     def _add_empty_mapping_row(self) -> None:
         row = self.table_mapping.rowCount()
@@ -1061,19 +1101,6 @@ class MainWindow(QMainWindow):
             save_mapping_csv(rules, Path(fpath))
             QMessageBox.information(self, "Успех", f"Справочник сохранен ({len(rules)} правил) в:\n{fpath}")
 
-    def _load_sample_karelia_rules(self) -> None:
-        sample = Path("docs_and_samples/Справочник_ЛМСЗ_Карелия.csv")
-        if sample.exists():
-            rules = load_mapping_file(sample)
-        else:
-            rules = []
-        if rules:
-            self._populate_mapping_table(rules)
-            self._auto_save_mapping_rules()
-            QMessageBox.information(self, "Справочник загружен", f"Загружен образец на {len(rules)} правил (Карелия).")
-        else:
-            QMessageBox.warning(self, "Ошибка", "Файл образца не найден.")
-
     def _clear_mapping_rules(self) -> None:
         reply = QMessageBox.question(
             self,
@@ -1095,7 +1122,7 @@ class MainWindow(QMainWindow):
             apply_studio_theme(app, self.current_theme)
         self.setStyleSheet(build_studio_stylesheet(self.current_theme))
         _set_windows_titlebar_dark(self, is_dark)
-        self.btn_theme.setText("☀ Светлая тема" if is_dark else "☾ Тёмная тема")
+        self.btn_theme.setText("Светлая тема" if is_dark else "Тёмная тема")
         self.settings.setValue("ui/theme", self.current_theme)
 
     def _toggle_theme(self) -> None:

@@ -296,3 +296,126 @@ def load_mapping_json(file_path: Path) -> list[LmszMappingRule]:
         return [LmszMappingRule(**item) for item in data if isinstance(item, dict)]
     return []
 
+
+def create_mapping_template_excel(file_path: Path) -> Path:
+    """Generates an annotated, user-friendly Excel mapping template (.xlsx)."""
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    assert ws is not None
+    ws.title = "Сопоставление мер"
+
+    header_font = Font(name="Segoe UI", size=10, bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="1E3A8A", end_color="1E3A8A", fill_type="solid")
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    data_font = Font(name="Segoe UI", size=10)
+    data_align_center = Alignment(horizontal="center", vertical="center")
+    data_align_left = Alignment(horizontal="left", vertical="center")
+
+    thin_border = Border(
+        left=Side(style="thin", color="CBD5E1"),
+        right=Side(style="thin", color="CBD5E1"),
+        top=Side(style="thin", color="CBD5E1"),
+        bottom=Side(style="thin", color="CBD5E1"),
+    )
+
+    ws.append(MAPPING_CSV_HEADERS)
+    ws.row_dimensions[1].height = 28
+
+    for col_idx in range(1, len(MAPPING_CSV_HEADERS) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+        cell.border = thin_border
+
+    sample_rows = [
+        [
+            "88e2558c-7d6a-42e5-94c8-af9e8444d6c1",
+            "1",
+            "Государственная социальная стипендия",
+            "d534a0cc-c323-4845-b18f-00ea013493bb",
+            "1",
+            "Студенты",
+            "6220000001",
+        ],
+        [
+            "9901ff43-8b72-4e81-92aa-dbd07489be3c",
+            "2",
+            "Государственная академическая стипендия",
+            "f568dbff-00e0-4736-acdf-dff0fcb8fdf1",
+            "1",
+            "Студенты",
+            "6220000001",
+        ],
+        [
+            "c22b75fb-c0e5-45ff-a45a-c5b10da25e5d",
+            "3",
+            "Предоставление бесплатного питания",
+            "aa171a84-34a9-41dc-980c-80d749b560c7",
+            "4",
+            "Лица из числа детей-сирот и детей, оставшихся без попечения родителей",
+            "6220000001",
+        ],
+    ]
+
+    for row_idx, row_data in enumerate(sample_rows, start=2):
+        ws.append(row_data)
+        ws.row_dimensions[row_idx].height = 22
+        for col_idx in range(1, len(row_data) + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.font = data_font
+            cell.border = thin_border
+            if col_idx in (1, 2, 4, 5, 7):
+                cell.alignment = data_align_center
+            else:
+                cell.alignment = data_align_left
+
+    col_widths = {1: 40, 2: 18, 3: 45, 4: 40, 5: 22, 6: 45, 7: 18}
+    for col_idx, w in col_widths.items():
+        ws.column_dimensions[get_column_letter(col_idx)].width = w
+
+    ws.freeze_panes = "A2"
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(file_path)
+    wb.close()
+    return file_path
+
+
+def create_mapping_template_csv(file_path: Path) -> Path:
+    """Generates a CSV mapping template with UTF-8 BOM encoding."""
+    rules = [
+        LmszMappingRule(
+            lmsz_uuid="88e2558c-7d6a-42e5-94c8-af9e8444d6c1",
+            lmsz_code="1",
+            lmsz_name="Государственная социальная стипендия",
+            category_uuid="d534a0cc-c323-4845-b18f-00ea013493bb",
+            category_code="1",
+            category_name="Студенты",
+            onmsz_code="6220000001",
+        ),
+        LmszMappingRule(
+            lmsz_uuid="9901ff43-8b72-4e81-92aa-dbd07489be3c",
+            lmsz_code="2",
+            lmsz_name="Государственная академическая стипендия",
+            category_uuid="f568dbff-00e0-4736-acdf-dff0fcb8fdf1",
+            category_code="1",
+            category_name="Студенты",
+            onmsz_code="6220000001",
+        ),
+        LmszMappingRule(
+            lmsz_uuid="c22b75fb-c0e5-45ff-a45a-c5b10da25e5d",
+            lmsz_code="3",
+            lmsz_name="Предоставление бесплатного питания",
+            category_uuid="aa171a84-34a9-41dc-980c-80d749b560c7",
+            category_code="4",
+            category_name="Лица из числа детей-сирот и детей, оставшихся без попечения родителей",
+            onmsz_code="6220000001",
+        ),
+    ]
+    save_mapping_csv(rules, file_path)
+    return file_path
+

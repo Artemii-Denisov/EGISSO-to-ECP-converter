@@ -14,6 +14,9 @@ import PyInstaller.__main__
 ROOT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT_DIR / "src"))
 
+from egisso_to_ecp.infrastructure.readers.mapping_reader import (  # noqa: E402
+    create_mapping_template_excel,
+)
 from egisso_to_ecp.presentation.gui.icon import write_ico_file  # noqa: E402
 
 ENTRY_POINT = ROOT_DIR / "src" / "egisso_to_ecp" / "presentation" / "gui" / "main.py"
@@ -59,6 +62,11 @@ def build() -> Path:
 
     if LICENSE_FILE.exists():
         shutil.copy2(LICENSE_FILE, DIST_DIR / "LICENSE.txt")
+
+    template_file = ROOT_DIR / "templates" / "Шаблон_сопоставления_мер_ЕЦП.xlsx"
+    if not template_file.exists():
+        create_mapping_template_excel(template_file)
+    shutil.copy2(template_file, DIST_DIR / "Шаблон_сопоставления_мер_ЕЦП.xlsx")
 
     exe_path = DIST_DIR / "EGISSO_to_ECP.exe"
     if not exe_path.exists():

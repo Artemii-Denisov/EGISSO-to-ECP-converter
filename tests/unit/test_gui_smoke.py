@@ -48,9 +48,14 @@ def test_app_icon_and_main_window_icon() -> None:
     try:
         assert not window.windowIcon().isNull()
         assert window.tab_widget.count() == 2
-        assert window.tab_widget.tabText(0) == "⚡ Конвертация"
-        assert "Справочник" in window.tab_widget.tabText(1)
+        assert window.tab_widget.tabText(0) == "Конвертация"
+        assert window.tab_widget.tabText(1) == "Сопоставление мер и категорий"
         assert window.table_mapping.columnCount() == 7
+
+        # Ensure no emojis in theme button or tab titles
+        assert "⚡" not in window.tab_widget.tabText(0)
+        assert "📋" not in window.tab_widget.tabText(1)
+        assert window.btn_theme.text() == "Светлая тема"
 
         # Test adding an empty row
         init_rows = window.table_mapping.rowCount()
