@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import logging
 import os
 import sys
 from pathlib import Path
@@ -11,28 +12,45 @@ from string import Template
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QCloseEvent, QColor, QFont, QPalette
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QApplication,
     QCheckBox,
     QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QMainWindow,
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
-from egisso_to_ecp.domain.models import ConversionConfig, ConversionSummary
+from egisso_to_ecp.domain.models import (
+    ConversionConfig,
+    ConversionSummary,
+    LmszMappingRule,
+)
+from egisso_to_ecp.infrastructure.readers.mapping_reader import (
+    load_mapping_file,
+    load_mapping_json,
+    save_mapping_csv,
+    save_mapping_json,
+)
 from egisso_to_ecp.presentation.gui.icon import create_app_icon
 from egisso_to_ecp.presentation.gui.worker import ConversionWorker
 
-APP_VERSION = "0.1.2"
+logger = logging.getLogger(__name__)
+
+APP_VERSION = "0.1.3"
 
 LICENSE_AND_DISCLAIMER_TEXT = """Лицензия на бесплатное использование (MIT) и отказ от ответственности
 
@@ -329,6 +347,65 @@ QTextEdit#ConsoleLog {
     font-size: 12px;
     padding: 8px 10px;
 }
+
+QTabWidget::pane {
+    border: 1px solid $border_card;
+    border-radius: 8px;
+    background-color: $bg_canvas;
+    top: -1px;
+}
+
+QTabBar::tab {
+    background-color: $bg_card;
+    color: $text_primary;
+    border: 1px solid $border_card;
+    border-bottom: none;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    padding: 8px 18px;
+    margin-right: 4px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+QTabBar::tab:selected {
+    background-color: $bg_canvas;
+    color: $text_strong;
+    border-color: $border_card;
+    border-bottom: 2px solid #2563EB;
+    font-weight: 600;
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: $input_bg;
+    color: $text_strong;
+}
+
+QTableWidget {
+    background-color: $bg_card;
+    color: $text_strong;
+    border: 1px solid $border_card;
+    border-radius: 8px;
+    gridline-color: $border_card;
+    font-size: 12px;
+    selection-background-color: #2563EB;
+    selection-color: #FFFFFF;
+}
+
+QTableWidget::item {
+    padding: 5px 8px;
+}
+
+QHeaderView::section {
+    background-color: $input_bg;
+    color: $text_primary;
+    font-weight: 600;
+    font-size: 11px;
+    padding: 6px 8px;
+    border: none;
+    border-right: 1px solid $border_card;
+    border-bottom: 1px solid $border_card;
+}
 """)
 
 
@@ -343,6 +420,13 @@ def _get_default_output_dir() -> Path:
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent / "output"
     return Path.cwd() / "output"
+
+
+def _get_mapping_storage_path() -> Path:
+    """Returns persistent JSON file path for mapping rules next to executable or in cwd."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "mapping_rules.json"
+    return Path.cwd() / "mapping_rules.json"
 
 
 def apply_studio_theme(app: QApplication, theme: str = "dark") -> None:
@@ -395,8 +479,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("EGISSO → ГИС ЕЦП (ЛК РСМСЗ)")
         self.setWindowIcon(create_app_icon())
-        self.resize(880, 840)
-        self.setMinimumSize(780, 680)
+        self.resize(980, 880)
+        self.setMinimumSize(800, 700)
 
         self.settings = QSettings("egisso-to-ecp", "EGISSO_to_ECP")
         saved_theme = initial_theme or str(self.settings.value("ui/theme", "dark"))
@@ -412,8 +496,8 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
 
         main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(20, 18, 20, 18)
-        main_layout.setSpacing(14)
+        main_layout.setContentsMargins(18, 16, 18, 16)
+        main_layout.setSpacing(12)
 
         # 1. Top Header Bar
         header_row = QHBoxLayout()
@@ -457,7 +541,27 @@ class MainWindow(QMainWindow):
 
         main_layout.addLayout(header_row)
 
-        # 2. Card 1: Data Paths
+        # 2. Main Tabs
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setObjectName("StudioTabs")
+
+        convert_tab = self._create_convert_tab()
+        mapping_tab = self._create_mapping_tab()
+
+        self.tab_widget.addTab(convert_tab, "⚡ Конвертация")
+        self.tab_widget.addTab(mapping_tab, "📋 Справочник мер и категорий (Маппинг)")
+
+        main_layout.addWidget(self.tab_widget, stretch=1)
+
+        self._load_initial_mapping_rules()
+
+    def _create_convert_tab(self) -> QWidget:
+        tab = QWidget()
+        tab_layout = QVBoxLayout(tab)
+        tab_layout.setContentsMargins(12, 12, 12, 12)
+        tab_layout.setSpacing(12)
+
+        # 1. Card 1: Data Paths
         paths_card = QFrame()
         paths_card.setObjectName("SurfaceCard")
         paths_layout = QGridLayout(paths_card)
@@ -501,9 +605,9 @@ class MainWindow(QMainWindow):
         paths_layout.addWidget(btn_browse_output, 2, 2)
 
         paths_layout.setColumnStretch(1, 1)
-        main_layout.addWidget(paths_card)
+        tab_layout.addWidget(paths_card)
 
-        # 3. Card 2: Conversion Parameters
+        # 2. Card 2: Conversion Parameters
         options_card = QFrame()
         options_card.setObjectName("SurfaceCard")
         options_outer = QVBoxLayout(options_card)
@@ -544,9 +648,9 @@ class MainWindow(QMainWindow):
         checks_grid.addWidget(self.cb_format_xml, 2, 0)
 
         options_outer.addLayout(checks_grid)
-        main_layout.addWidget(options_card)
+        tab_layout.addWidget(options_card)
 
-        # 4. Card 3: Organization Requisites & ECP Measure Codes
+        # 3. Card 3: Organization Requisites & ECP Measure Codes
         org_card = QFrame()
         org_card.setObjectName("SurfaceCard")
         org_outer = QVBoxLayout(org_card)
@@ -613,23 +717,23 @@ class MainWindow(QMainWindow):
         org_grid.addWidget(lbl_tmsz, 0, 2)
         org_grid.addWidget(self.txt_tmsz, 0, 3)
 
-        lbl_lmsz = QLabel("Код локальной меры (ЛМСЗ):")
+        lbl_lmsz = QLabel("Код ЛМСЗ по умолчанию:")
         lbl_lmsz.setObjectName("FieldLabel")
         saved_lmsz = str(self.settings.value("ui/code_lmsz", ""))
         self.txt_lmsz = QLineEdit(saved_lmsz)
         self.txt_lmsz.setFixedHeight(34)
-        self.txt_lmsz.setPlaceholderText("Числовой код (напр. 3200133300153)")
-        self.txt_lmsz.setToolTip("Числовой код локальной меры (ЛМСЗ) в реестре региона")
+        self.txt_lmsz.setPlaceholderText("Числовой код (напр. 1 или 3200133300153)")
+        self.txt_lmsz.setToolTip("Резервный код ЛМСЗ, если мера не найдена в таблице соответствия")
         org_grid.addWidget(lbl_lmsz, 1, 2)
         org_grid.addWidget(self.txt_lmsz, 1, 3)
 
-        lbl_cat = QLabel("Код категории получателя:")
+        lbl_cat = QLabel("Код категории по умолчанию:")
         lbl_cat.setObjectName("FieldLabel")
         saved_cat = str(self.settings.value("ui/code_category", ""))
         self.txt_category = QLineEdit(saved_cat)
         self.txt_category.setFixedHeight(34)
-        self.txt_category.setPlaceholderText("Числовой код (напр. 3200133300153115004)")
-        self.txt_category.setToolTip("Числовой код категории получателя локальной меры по классификатору КМСЗ")
+        self.txt_category.setPlaceholderText("Числовой код (напр. 1 или 3200133300153115004)")
+        self.txt_category.setToolTip("Резервный код категории, если запись не найдена в таблице соответствия")
         org_grid.addWidget(lbl_cat, 2, 2)
         org_grid.addWidget(self.txt_category, 2, 3)
 
@@ -646,9 +750,9 @@ class MainWindow(QMainWindow):
         org_grid.setColumnStretch(1, 1)
         org_grid.setColumnStretch(3, 1)
         org_outer.addLayout(org_grid)
-        main_layout.addWidget(org_card)
+        tab_layout.addWidget(org_card)
 
-        # 4. Card 3: Execution Log Console
+        # 4. Card 4: Execution Log Console
         log_card = QFrame()
         log_card.setObjectName("SurfaceCard")
         log_layout = QVBoxLayout(log_card)
@@ -678,7 +782,7 @@ class MainWindow(QMainWindow):
         self.txt_log.setPlaceholderText("Ожидание запуска конвертации…")
         log_layout.addWidget(self.txt_log, stretch=1)
 
-        main_layout.addWidget(log_card, stretch=1)
+        tab_layout.addWidget(log_card, stretch=1)
 
         # 5. Bottom Action Bar
         bottom_bar = QHBoxLayout()
@@ -700,7 +804,287 @@ class MainWindow(QMainWindow):
         self.btn_start.clicked.connect(self._start_conversion)
         bottom_bar.addWidget(self.btn_start)
 
-        main_layout.addLayout(bottom_bar)
+        tab_layout.addLayout(bottom_bar)
+        return tab
+
+    def _create_mapping_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
+
+        # Top Info Card
+        info_card = QFrame()
+        info_card.setObjectName("SurfaceCard")
+        info_layout = QVBoxLayout(info_card)
+        info_layout.setContentsMargins(14, 12, 14, 12)
+        info_layout.setSpacing(4)
+
+        lbl_info_title = QLabel("ТАБЛИЦА СОПОСТАВЛЕНИЯ ЛОКАЛЬНЫХ МЕР И КАТЕГОРИЙ (ЛМСЗ → ГИС ЕЦП)")
+        lbl_info_title.setObjectName("SectionTitle")
+        info_layout.addWidget(lbl_info_title)
+
+        lbl_info_desc = QLabel(
+            "При конвертации реестров программа автоматически сопоставляет каждую запись с этой таблицей по коду меры/категории "
+            "или их наименованию и проставляет официальные UUID карточек и числовые коды.\n"
+            "Вы можете загрузить справочник из официального CSV-экспорта ЛК ЕЦП/ЕГИССО или ввести данные вручную (двойной клик по ячейке)."
+        )
+        lbl_info_desc.setObjectName("MutedText")
+        lbl_info_desc.setWordWrap(True)
+        info_layout.addWidget(lbl_info_desc)
+        layout.addWidget(info_card)
+
+        # Toolbar
+        toolbar = QHBoxLayout()
+        toolbar.setSpacing(8)
+
+        self.txt_mapping_filter = QLineEdit()
+        self.txt_mapping_filter.setFixedHeight(34)
+        self.txt_mapping_filter.setPlaceholderText("🔍 Поиск по названию меры, категории или коду…")
+        self.txt_mapping_filter.textChanged.connect(self._filter_mapping_table)
+        toolbar.addWidget(self.txt_mapping_filter, stretch=1)
+
+        btn_load = QPushButton("📂 Загрузить из файла…")
+        btn_load.setFixedHeight(34)
+        btn_load.clicked.connect(self._browse_mapping_file)
+        toolbar.addWidget(btn_load)
+
+        btn_add = QPushButton("➕ Добавить")
+        btn_add.setFixedHeight(34)
+        btn_add.clicked.connect(self._add_empty_mapping_row)
+        toolbar.addWidget(btn_add)
+
+        btn_del = QPushButton("🗑️ Удалить")
+        btn_del.setFixedHeight(34)
+        btn_del.clicked.connect(self._delete_selected_mapping_row)
+        toolbar.addWidget(btn_del)
+
+        btn_export = QPushButton("💾 Экспорт в CSV")
+        btn_export.setFixedHeight(34)
+        btn_export.clicked.connect(self._export_mapping_csv)
+        toolbar.addWidget(btn_export)
+
+        btn_sample = QPushButton("⭐ Образец (Карелия)")
+        btn_sample.setFixedHeight(34)
+        btn_sample.setToolTip("Загрузить типовой справочник на 14 мер Республики Карелия")
+        btn_sample.clicked.connect(self._load_sample_karelia_rules)
+        toolbar.addWidget(btn_sample)
+
+        btn_clear = QPushButton("🧹 Очистить")
+        btn_clear.setFixedHeight(34)
+        btn_clear.clicked.connect(self._clear_mapping_rules)
+        toolbar.addWidget(btn_clear)
+
+        layout.addLayout(toolbar)
+
+        # Table
+        self.table_mapping = QTableWidget()
+        self.table_mapping.setColumnCount(7)
+        self.table_mapping.setHorizontalHeaderLabels([
+            "UUID ЛМСЗ (Решение_КодЛМСЗ)",
+            "Код ЛМСЗ (число)",
+            "Наименование меры (ЛМСЗ)",
+            "UUID категории (КатегорияЛокальная)",
+            "Код категории (число)",
+            "Наименование категории",
+            "Код ОНМСЗ",
+        ])
+        header = self.table_mapping.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Interactive)
+
+        self.table_mapping.setColumnWidth(0, 160)
+        self.table_mapping.setColumnWidth(1, 90)
+        self.table_mapping.setColumnWidth(3, 160)
+        self.table_mapping.setColumnWidth(4, 90)
+        self.table_mapping.setColumnWidth(6, 100)
+
+        self.table_mapping.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table_mapping.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.table_mapping.itemChanged.connect(self._on_table_item_changed)
+        layout.addWidget(self.table_mapping, stretch=1)
+
+        # Status row
+        status_row = QHBoxLayout()
+        self.lbl_mapping_count = QLabel("Правил в справочнике: 0")
+        self.lbl_mapping_count.setObjectName("FieldLabel")
+        status_row.addWidget(self.lbl_mapping_count)
+
+        status_row.addStretch()
+
+        lbl_autosave_hint = QLabel("💡 Изменения автоматически сохраняются в mapping_rules.json")
+        lbl_autosave_hint.setObjectName("MutedText")
+        status_row.addWidget(lbl_autosave_hint)
+
+        layout.addLayout(status_row)
+        return tab
+
+    def _populate_mapping_table(self, rules: list[LmszMappingRule]) -> None:
+        self.table_mapping.blockSignals(True)
+        self.table_mapping.setRowCount(len(rules))
+        for r_idx, rule in enumerate(rules):
+            row_vals = [
+                rule.lmsz_uuid,
+                rule.lmsz_code,
+                rule.lmsz_name,
+                rule.category_uuid,
+                rule.category_code,
+                rule.category_name,
+                rule.onmsz_code,
+            ]
+            for c_idx, val in enumerate(row_vals):
+                item = QTableWidgetItem(val)
+                self.table_mapping.setItem(r_idx, c_idx, item)
+        self.table_mapping.blockSignals(False)
+        self._update_mapping_count()
+
+    def _get_rules_from_table(self) -> list[LmszMappingRule]:
+        rules: list[LmszMappingRule] = []
+        for r in range(self.table_mapping.rowCount()):
+            cells: list[str] = []
+            for c in range(7):
+                it = self.table_mapping.item(r, c)
+                cells.append(it.text().strip() if it else "")
+
+            lmsz_uuid, lmsz_code, lmsz_name, cat_uuid, cat_code, cat_name, onmsz = cells
+            if lmsz_uuid or lmsz_code or lmsz_name:
+                rules.append(
+                    LmszMappingRule(
+                        lmsz_uuid=lmsz_uuid,
+                        lmsz_code=lmsz_code,
+                        lmsz_name=lmsz_name,
+                        category_uuid=cat_uuid,
+                        category_code=cat_code,
+                        category_name=cat_name,
+                        onmsz_code=onmsz,
+                    )
+                )
+        return rules
+
+    def _update_mapping_count(self) -> None:
+        count = self.table_mapping.rowCount()
+        self.lbl_mapping_count.setText(f"Правил в справочнике: {count}")
+
+    def _on_table_item_changed(self, item: QTableWidgetItem) -> None:
+        self._auto_save_mapping_rules()
+
+    def _auto_save_mapping_rules(self) -> None:
+        rules = self._get_rules_from_table()
+        storage = _get_mapping_storage_path()
+        try:
+            save_mapping_json(rules, storage)
+            self._update_mapping_count()
+        except Exception as e:
+            logger.warning("Не удалось сохранить правила маппинга: %s", e)
+
+    def _load_initial_mapping_rules(self) -> None:
+        storage = _get_mapping_storage_path()
+        if storage.exists():
+            rules = load_mapping_json(storage)
+            if rules:
+                self._populate_mapping_table(rules)
+                return
+
+        sample = Path("docs_and_samples/Справочник_ЛМСЗ_Карелия.csv")
+        if sample.exists():
+            rules = load_mapping_file(sample)
+            if rules:
+                self._populate_mapping_table(rules)
+                self._auto_save_mapping_rules()
+
+    def _filter_mapping_table(self, query: str) -> None:
+        q = query.strip().lower()
+        for row in range(self.table_mapping.rowCount()):
+            if not q:
+                self.table_mapping.setRowHidden(row, False)
+                continue
+            matched = False
+            for col in range(self.table_mapping.columnCount()):
+                item = self.table_mapping.item(row, col)
+                if item and q in item.text().lower():
+                    matched = True
+                    break
+            self.table_mapping.setRowHidden(row, not matched)
+
+    def _browse_mapping_file(self) -> None:
+        fpath, _ = QFileDialog.getOpenFileName(
+            self,
+            "Выберите файл справочника мер (CSV или Excel)",
+            "",
+            "Таблицы данных (*.csv *.xlsx *.xls *.json);;CSV файлы (*.csv);;Excel файлы (*.xlsx *.xls);;Все файлы (*.*)",
+        )
+        if not fpath:
+            return
+        rules = load_mapping_file(Path(fpath))
+        if not rules:
+            QMessageBox.warning(self, "Предупреждение", "Не удалось извлечь правила сопоставления из выбранного файла.")
+            return
+        self._populate_mapping_table(rules)
+        self._auto_save_mapping_rules()
+        QMessageBox.information(self, "Успех", f"Успешно загружено {len(rules)} правил сопоставления мер и категорий.")
+
+    def _add_empty_mapping_row(self) -> None:
+        row = self.table_mapping.rowCount()
+        self.table_mapping.insertRow(row)
+        for col in range(self.table_mapping.columnCount()):
+            self.table_mapping.setItem(row, col, QTableWidgetItem(""))
+        self._update_mapping_count()
+        self._auto_save_mapping_rules()
+
+    def _delete_selected_mapping_row(self) -> None:
+        selected = self.table_mapping.selectionModel().selectedRows()
+        if not selected:
+            QMessageBox.information(self, "Информация", "Выберите строку для удаления.")
+            return
+        for idx in sorted([s.row() for s in selected], reverse=True):
+            self.table_mapping.removeRow(idx)
+        self._update_mapping_count()
+        self._auto_save_mapping_rules()
+
+    def _export_mapping_csv(self) -> None:
+        rules = self._get_rules_from_table()
+        if not rules:
+            QMessageBox.information(self, "Информация", "Справочник пуст, нечего экспортировать.")
+            return
+        fpath, _ = QFileDialog.getSaveFileName(
+            self,
+            "Сохранить справочник в CSV",
+            "mapping_rules.csv",
+            "CSV файлы (*.csv);;Все файлы (*.*)",
+        )
+        if fpath:
+            save_mapping_csv(rules, Path(fpath))
+            QMessageBox.information(self, "Успех", f"Справочник сохранен ({len(rules)} правил) в:\n{fpath}")
+
+    def _load_sample_karelia_rules(self) -> None:
+        sample = Path("docs_and_samples/Справочник_ЛМСЗ_Карелия.csv")
+        if sample.exists():
+            rules = load_mapping_file(sample)
+        else:
+            rules = []
+        if rules:
+            self._populate_mapping_table(rules)
+            self._auto_save_mapping_rules()
+            QMessageBox.information(self, "Справочник загружен", f"Загружен образец на {len(rules)} правил (Карелия).")
+        else:
+            QMessageBox.warning(self, "Ошибка", "Файл образца не найден.")
+
+    def _clear_mapping_rules(self) -> None:
+        reply = QMessageBox.question(
+            self,
+            "Подтверждение",
+            "Вы действительно хотите очистить всю таблицу сопоставления?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.table_mapping.setRowCount(0)
+            self._update_mapping_count()
+            self._auto_save_mapping_rules()
 
     def apply_theme(self, theme: str) -> None:
         """Applies dark or light theme across palette, QSS, and Windows titlebar."""
@@ -770,6 +1154,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue("ui/code_category", cat_val)
         self.settings.setValue("ui/funding_source", fund_val)
 
+        rules = self._get_rules_from_table()
         config = ConversionConfig(
             input_path=Path(input_dir_str),
             output_dir=Path(output_dir_str),
@@ -786,6 +1171,7 @@ class MainWindow(QMainWindow):
             code_lmsz_num=lmsz_val,
             code_category_num=cat_val,
             funding_source=fund_val,
+            mapping_rules=rules,
         )
 
         self.btn_start.setEnabled(False)
@@ -836,7 +1222,7 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "Ошибка выполнения", f"Произошла ошибка:\n{error_message}")
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
-        """Prevents window destruction while background worker thread is running."""
+        """Prevents window destruction while background worker thread is running and saves mapping."""
         if self.worker is not None and self.worker.isRunning():
             QMessageBox.warning(
                 self,
@@ -845,6 +1231,7 @@ class MainWindow(QMainWindow):
             )
             event.ignore()
             return
+        self._auto_save_mapping_rules()
         event.accept()
 
 

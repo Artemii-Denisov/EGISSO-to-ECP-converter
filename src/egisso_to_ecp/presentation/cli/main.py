@@ -147,6 +147,14 @@ def convert(
             help="Код формы предоставления (по умолчанию: 3)",
         ),
     ] = "3",
+    mapping_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--mapping-file",
+            "-m",
+            help="Путь к файлу справочника мер и категорий (CSV/XLSX/JSON) для автоподстановки UUID и кодов",
+        ),
+    ] = None,
 ) -> None:
     """Запуск конвертации реестров ЕГИССО в пакеты ГИС ЕЦП."""
     console.print(
@@ -182,6 +190,7 @@ def convert(
         code_category_num=code_category,
         funding_source=funding_source,
         assignment_form=assignment_form,
+        mapping_file=mapping_file,
     )
 
     with Progress(

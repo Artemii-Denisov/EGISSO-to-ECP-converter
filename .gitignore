@@ -8,6 +8,7 @@ docs_and_samples/
 input/
 output/
 data/
+mapping_rules.json
 *.xlsx
 *.xls
 *.csv

@@ -353,3 +353,44 @@ def test_real_sample_file_smoke(tmp_path: Path) -> None:
     assert isinstance(unit_cell.value, int)
     assert unit_cell.value == 383
     wb.close()
+
+
+def test_pipeline_with_mapping_rules(tmp_path: Path) -> None:
+    from egisso_to_ecp.domain.models import LmszMappingRule
+
+    out_dir = tmp_path / "output_mapped"
+    karelia_rule = LmszMappingRule(
+        lmsz_uuid="88e2558c-7d6a-42e5-94c8-af9e8444d6c1",
+        lmsz_code="1",
+        lmsz_name="Соцстипендия",
+        category_uuid="d534a0cc-c323-4845-b18f-00ea013493bb",
+        category_code="1",
+        category_name="Студенты",
+        onmsz_code="6220000001",
+    )
+    config = ConversionConfig(
+        input_path=_DOCS_SAMPLES,
+        output_dir=out_dir,
+        export_csv=True,
+        export_xlsx=True,
+        export_xml=True,
+        mapping_rules=[karelia_rule],
+    )
+    summary = ConversionPipeline(config).run()
+    assert summary.valid_decisions_count == 2
+    assert len(summary.csv_files_written) == 1
+    assert len(summary.xlsx_files_written) == 1
+    assert len(summary.xml_files_written) == 1
+
+    # Check XLSX generated with mapped values
+    wb = openpyxl.load_workbook(summary.xlsx_files_written[0])
+    ws = wb.active
+    assert ws is not None
+
+    # Row 3 is first decision
+    assert ws.cell(row=3, column=COL_INDEX["Решение_КодЛМСЗ"] + 1).value == "88e2558c-7d6a-42e5-94c8-af9e8444d6c1"
+    assert str(ws.cell(row=3, column=COL_INDEX["Решение_СведенияОНазначении_ЛМСЗ"] + 1).value) == "1"
+    assert str(ws.cell(row=3, column=COL_INDEX["Решение_СведенияОНазначении_КатегорияПолучателяЛокальная"] + 1).value) == "1"
+    assert str(ws.cell(row=3, column=COL_INDEX["Решение_СведенияОНазначении_КодЛокальнойКатегории"] + 1).value) == "1"
+    wb.close()
+

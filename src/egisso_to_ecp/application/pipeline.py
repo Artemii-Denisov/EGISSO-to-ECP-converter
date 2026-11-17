@@ -14,6 +14,7 @@ from egisso_to_ecp.domain.models import (
     ValidationIssue,
 )
 from egisso_to_ecp.infrastructure.readers.excel_reader import ExcelRegistryReader
+from egisso_to_ecp.infrastructure.readers.mapping_reader import load_mapping_file
 from egisso_to_ecp.infrastructure.scanner import DirectoryScanner
 from egisso_to_ecp.infrastructure.writers.ecp_csv_writer import EcpCsvWriter
 from egisso_to_ecp.infrastructure.writers.ecp_excel_writer import EcpExcelWriter
@@ -52,6 +53,13 @@ class ConversionPipeline:
         """Executes full pipeline: scan -> read -> validate -> group -> write."""
         summary = ConversionSummary()
         self.config.output_dir.mkdir(parents=True, exist_ok=True)
+
+        if self.config.mapping_file and not self.config.mapping_rules:
+            self._log(f"Загрузка справочника сопоставления мер: {self.config.mapping_file.name}")
+            self.config.mapping_rules = load_mapping_file(self.config.mapping_file)
+            self._log(f"Загружено правил сопоставления: {len(self.config.mapping_rules)}")
+        elif self.config.mapping_rules:
+            self._log(f"Используется правил сопоставления мер: {len(self.config.mapping_rules)}")
 
         # 1. Scanning
         self._log(f"Начало сканирования каталога: {self.config.input_path}")

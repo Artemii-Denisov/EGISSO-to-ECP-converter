@@ -306,6 +306,22 @@ def normalize_form_code(raw: Any, default: str = "1") -> str:
     return s
 
 
+def normalize_code_num(raw: Any) -> str:
+    """
+    Normalizes numeric or category code representations:
+    e.g. 1.0 -> '1', '14.0' -> '14', 1 -> '1', ' 4 ' -> '4'.
+    Leaves alphanumeric identifiers untouched.
+    """
+    if raw is None:
+        return ""
+    val_str = str(raw).strip()
+    if not val_str:
+        return ""
+    if re.match(r"^\d+\.0+$", val_str):
+        return val_str.split(".")[0]
+    return val_str
+
+
 def extract_year_month_from_path(file_path: str) -> tuple[int, int] | None:
     """
     Extracts year and month from file path or file name.

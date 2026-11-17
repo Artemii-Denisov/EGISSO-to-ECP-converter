@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from egisso_to_ecp.domain.models import (
     EcpDecision,
     EcpPeriod,
+    LmszMappingRule,
     OldEgissoRecord,
     RelatedPerson,
     ValidationIssue,
@@ -19,6 +20,7 @@ from egisso_to_ecp.domain.normalizers import (
     is_uuid_str,
     normalize_amount,
     normalize_boolean_flag,
+    normalize_code_num,
     normalize_date,
     normalize_form_code,
     normalize_gender,
@@ -30,6 +32,91 @@ from egisso_to_ecp.domain.normalizers import (
 
 if TYPE_CHECKING:
     from egisso_to_ecp.domain.models import ConversionConfig
+
+
+def find_matching_rule(
+    record: OldEgissoRecord, rules: list[LmszMappingRule]
+) -> LmszMappingRule | None:
+    """
+    Finds the best matching mapping rule for an incoming record.
+    Evaluation priority:
+      1. Exact match on both LMSZ UUID and Category UUID.
+      2. Match on LMSZ UUID and normalized Category Code.
+      3. Match on normalized LMSZ Code and Category UUID.
+      4. Match on normalized LMSZ Code and normalized Category Code.
+      5. Match on LMSZ UUID alone.
+      6. Match on normalized LMSZ Code alone.
+      7. Match on LMSZ Name substring in record content/comment.
+    """
+    if not rules:
+        return None
+
+    rec_lmsz = (record.lmsz_id or "").strip()
+    rec_cat = (record.category_id or "").strip()
+    rec_lmsz_norm = normalize_code_num(rec_lmsz)
+    rec_cat_norm = normalize_code_num(rec_cat)
+    rec_content = (record.content or record.comment or "").strip().lower()
+
+    # Priority 1: Both UUIDs match exactly
+    if is_uuid_str(rec_lmsz) and is_uuid_str(rec_cat):
+        for r in rules:
+            if (
+                r.lmsz_uuid.lower() == rec_lmsz.lower()
+                and r.category_uuid.lower() == rec_cat.lower()
+            ):
+                return r
+
+    # Priority 2: LMSZ UUID + Category code match
+    if is_uuid_str(rec_lmsz) and rec_cat:
+        for r in rules:
+            if r.lmsz_uuid.lower() == rec_lmsz.lower():
+                if normalize_code_num(r.category_code) == rec_cat_norm:
+                    return r
+
+    # Priority 3: LMSZ code + Category UUID match
+    if rec_lmsz and is_uuid_str(rec_cat):
+        for r in rules:
+            if r.category_uuid.lower() == rec_cat.lower():
+                if normalize_code_num(r.lmsz_code) == rec_lmsz_norm:
+                    return r
+
+    # Priority 4: Both codes match (LMSZ code & Category code)
+    if rec_lmsz and rec_cat:
+        for r in rules:
+            if (
+                normalize_code_num(r.lmsz_code) == rec_lmsz_norm
+                and normalize_code_num(r.category_code) == rec_cat_norm
+            ):
+                return r
+
+    # Priority 5: LMSZ UUID alone
+    if is_uuid_str(rec_lmsz):
+        for r in rules:
+            if r.lmsz_uuid.lower() == rec_lmsz.lower():
+                return r
+
+    # Priority 6: LMSZ Code alone
+    if rec_lmsz_norm:
+        for r in rules:
+            if normalize_code_num(r.lmsz_code) == rec_lmsz_norm:
+                return r
+
+    # Priority 7: Content / measure name substring or stem match
+    if rec_content:
+        words_rec = set(re.findall(r"\w{4,}", rec_content))
+        stems_rec = {w[:5] for w in words_rec}
+        for r in rules:
+            if r.lmsz_name and len(r.lmsz_name) >= 4:
+                name_clean = r.lmsz_name.strip().lower()
+                if name_clean in rec_content or rec_content in name_clean:
+                    return r
+                words_rule = set(re.findall(r"\w{4,}", name_clean))
+                stems_rule = {w[:5] for w in words_rule}
+                common_stems = stems_rec & stems_rule
+                if len(common_stems) >= 2 or (len(words_rule) == 1 and bool(common_stems)):
+                    return r
+
+    return None
 
 
 def validate_and_convert_record(
@@ -423,6 +510,33 @@ def validate_and_convert_record(
         if config.code_category_num.strip()
         else (category_id if is_uuid_str(category_id) else None)
     )
+
+    # Check mapping rules if available
+    matched_rule = find_matching_rule(record, config.mapping_rules) if config.mapping_rules else None
+    if matched_rule:
+        if matched_rule.lmsz_uuid:
+            code_lmsz = matched_rule.lmsz_uuid
+        if matched_rule.lmsz_code:
+            lmsz_code_num = normalize_code_num(matched_rule.lmsz_code)
+        if matched_rule.category_uuid:
+            category_id = matched_rule.category_uuid
+        if matched_rule.category_code:
+            cat_code_norm = normalize_code_num(matched_rule.category_code)
+            category_code_num = cat_code_norm
+            local_category_code = cat_code_norm
+        if matched_rule.onmsz_code and not id_onmsz:
+            id_onmsz = normalize_onmsz_id(matched_rule.onmsz_code)
+    elif config.mapping_rules:
+        issues.append(
+            ValidationIssue(
+                file_source=record.file_source,
+                row_index=record.row_index,
+                field_name="LMSZID/categoryID",
+                value=f"LMSZ={record.lmsz_id}, CAT={record.category_id}",
+                message="Мера или категория не найдены в справочнике соответствия (маппинга)",
+                severity=ValidationSeverity.WARNING,
+            )
+        )
 
     assignment_form = (
         normalize_form_code(record.form_code, default=config.assignment_form)

@@ -207,6 +207,17 @@ class EcpPackage(BaseModel):
         return len(self.decisions)
 
 
+class LmszMappingRule(BaseModel):
+    """Mapping rule between source LMSZ/category and GIS ECP directory."""
+    lmsz_uuid: str = Field(default="", description="UUID карточки ЛМСЗ (например: 88e2558c-...)")
+    lmsz_code: str = Field(default="", description="Числовой код ЛМСЗ (например: 1 или 1.0)")
+    lmsz_name: str = Field(default="", description="Наименование меры")
+    category_uuid: str = Field(default="", description="UUID локальной категории")
+    category_code: str = Field(default="", description="Числовой код локальной категории (например: 1 или 1.0)")
+    category_name: str = Field(default="", description="Наименование категории")
+    onmsz_code: str = Field(default="", description="Код ОНМСЗ (например: 6220000001)")
+
+
 class ConversionConfig(BaseModel):
     """Runtime configuration for data conversion."""
     input_path: Path
@@ -224,6 +235,8 @@ class ConversionConfig(BaseModel):
     code_tmsz: str = "220119"
     code_lmsz_num: str = ""
     code_category_num: str = ""
+    mapping_rules: list[LmszMappingRule] = Field(default_factory=list)
+    mapping_file: Path | None = None
     funding_source: str = "5"
     assignment_form: str = "3"
     periodicity: str = "2"

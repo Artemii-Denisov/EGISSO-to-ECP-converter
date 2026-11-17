@@ -47,5 +47,18 @@ def test_app_icon_and_main_window_icon() -> None:
     window = MainWindow(initial_theme="dark")
     try:
         assert not window.windowIcon().isNull()
+        assert window.tab_widget.count() == 2
+        assert window.tab_widget.tabText(0) == "⚡ Конвертация"
+        assert "Справочник" in window.tab_widget.tabText(1)
+        assert window.table_mapping.columnCount() == 7
+
+        # Test adding an empty row
+        init_rows = window.table_mapping.rowCount()
+        window._add_empty_mapping_row()
+        assert window.table_mapping.rowCount() == init_rows + 1
+
+        # Test getting rules
+        rules = window._get_rules_from_table()
+        assert isinstance(rules, list)
     finally:
         window.close()
