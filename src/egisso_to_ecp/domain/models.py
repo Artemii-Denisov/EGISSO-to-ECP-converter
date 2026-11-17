@@ -153,6 +153,9 @@ class EcpDecision(BaseModel):
     id_decision: str = Field(..., description="Уникальный идентификатор решения")
     id_statement: str | None = Field(None, description="ИД заявления (для исторических опционально)")
     id_onmsz: str
+    inn: str | None = None
+    kpp: str | None = None
+    ogrn: str | None = None
     id_category: str
     snils_recipient: str
     family_name: str
@@ -168,13 +171,15 @@ class EcpDecision(BaseModel):
     decision_date: str = Field(..., description="ISO date YYYY-MM-DD")
     date_start: str = Field(..., description="ISO date YYYY-MM-DD")
     date_finish: str | None = Field(None, description="ISO date YYYY-MM-DD")
-    assignment_form: str = Field(default="1", description="1=Денежная")
+    assignment_form: str = Field(default="3", description="3=Услуга/Стипендия или 1=Денежная")
     periodicity: str = Field(default="2", description="Периодичность предоставления")
-    funding_source: str = Field(default="1", description="Источник финансирования")
+    funding_source: str = Field(default="5", description="Источник финансирования (5=Бюджет субъекта РФ)")
     id_measure: str | None = None
     region_code: str = Field(default="62", description="Код субъекта РФ")
     code_msz: str | None = None
     code_lmsz: str | None = None
+    lmsz_code_num: str | None = None
+    category_code_num: str | None = None
     local_category_code: str | None = None
     reason_type: str | None = None
     reason_title: str | None = None
@@ -210,7 +215,18 @@ class ConversionConfig(BaseModel):
     split_by_months: bool = True
     export_csv: bool = True
     export_xlsx: bool = False
-    provider_code: str = "430746"
+    provider_code: str = "1788"
+    onmsz_id: str = ""
+    onmsz_inn: str = ""
+    onmsz_kpp: str = ""
+    onmsz_ogrn: str = ""
+    code_tmsz: str = "220119"
+    code_lmsz_num: str = ""
+    code_category_num: str = ""
+    funding_source: str = "5"
+    assignment_form: str = "3"
+    periodicity: str = "2"
+    decision_basis: str = "1"
     package_size_limit_mb: float = 18.5
     default_oktmo: str = "62701000001"
     default_region_code: str = "62"

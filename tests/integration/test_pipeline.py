@@ -8,6 +8,7 @@ import pytest
 
 from egisso_to_ecp.application.pipeline import ConversionPipeline
 from egisso_to_ecp.domain.models import ConversionConfig
+from egisso_to_ecp.domain.normalizers import is_uuid_str
 from egisso_to_ecp.infrastructure.writers.ecp_schema import COL_INDEX, ECP_COLUMNS
 
 
@@ -210,10 +211,11 @@ def test_end_to_end_conversion(tmp_path: Path) -> None:
         assert reader[1][COL_INDEX["КоличествоЗаписей"]] == "1"
 
         # Row 3: Parent decision row (nested repeating blocks must remain empty)
-        assert reader[2][COL_INDEX["Решение_ИДЗаписи"]] == "FACT-001"
+        # Non-GUID source ID "FACT-001" must not leak into Решение_ИДЗаписи (GUID pattern).
+        assert is_uuid_str(reader[2][COL_INDEX["Решение_ИДЗаписи"]])
         assert reader[2][COL_INDEX["Решение_ТипДокумента"]] == "3"
         assert reader[2][COL_INDEX["Решение_ТипДействия"]] == "1"
-        assert reader[2][COL_INDEX["Решение_Получатель_СНИЛС"]] == "11223344595"
+        assert reader[2][COL_INDEX["Решение_Получатель_СНИЛС"]] == "112-233-445 95"
         assert reader[2][COL_INDEX["Решение_Получатель_ФИО_Фамилия"]] == "Иванов"
         assert reader[2][COL_INDEX["Решение_Получатель_ФИО_Имя"]] == "Иван"
         assert reader[2][COL_INDEX["Решение_Получатель_ДатаРождения"]] == "2002-04-12"
@@ -233,7 +235,7 @@ def test_end_to_end_conversion(tmp_path: Path) -> None:
 
         # Row 5: Child СвязанноеЛицо row
         assert reader[4][COL_INDEX["Решение_ИДЗаписи"]] == ""
-        assert reader[4][COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_СНИЛС"]] == "11223344595"
+        assert reader[4][COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_СНИЛС"]] == "112-233-445 95"
         assert reader[4][COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_ФИО_Фамилия"]] == "Иванова"
         assert reader[4][COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_ДатаРождения"]] == "1978-02-01"
 
@@ -254,8 +256,7 @@ def test_end_to_end_conversion(tmp_path: Path) -> None:
     # Check native int/float cell types in XLSX
     assert ws_xlsx.cell(row=2, column=COL_INDEX["КоличествоЗаписей"] + 1).value == 1
     assert isinstance(ws_xlsx.cell(row=2, column=COL_INDEX["КоличествоЗаписей"] + 1).value, int)
-    assert ws_xlsx.cell(row=3, column=COL_INDEX["Решение_Получатель_СНИЛС"] + 1).value == 11223344595
-    assert isinstance(ws_xlsx.cell(row=3, column=COL_INDEX["Решение_Получатель_СНИЛС"] + 1).value, int)
+    assert ws_xlsx.cell(row=3, column=COL_INDEX["Решение_Получатель_СНИЛС"] + 1).value == "112-233-445 95"
     assert ws_xlsx.cell(row=3, column=COL_INDEX["Решение_ОНМСЗ_ИдентификаторОНМСЗ"] + 1).value == 377
     amt_cell = ws_xlsx.cell(row=4, column=COL_INDEX["Решение_СведенияОНазначении_ПериодыНазначения_СуммаКоличество"] + 1)
     assert amt_cell.value == 3500.0
@@ -319,19 +320,21 @@ def test_real_sample_file_smoke(tmp_path: Path) -> None:
         assert ws.column_dimensions[col_letter].width >= 14
 
     # Row 2: Base row
-    assert ws.cell(row=2, column=COL_INDEX["ПоставщикИнформации"] + 1).value == 430746
+    assert ws.cell(row=2, column=COL_INDEX["ПоставщикИнформации"] + 1).value == 1788
     assert ws.cell(row=2, column=COL_INDEX["КоличествоЗаписей"] + 1).value == 2
 
     # Rows 3 & 5: Valid decisions (Губалев, Глызарев)
     assert ws.cell(row=3, column=COL_INDEX["Решение_Получатель_ФИО_Фамилия"] + 1).value == "Губалев"
     assert ws.cell(row=3, column=COL_INDEX["Решение_РеквизитыРешения_НомерРешения"] + 1).value == "РЕШ-20261111-0004"
     assert ws.cell(row=3, column=COL_INDEX["Решение_ОНМСЗ_ИдентификаторОНМСЗ"] + 1).value == 6220000001
+    assert ws.cell(row=3, column=COL_INDEX["Решение_КодМСЗ"] + 1).value == 220119
     assert ws.cell(row=3, column=COL_INDEX["Решение_КодЛМСЗ"] + 1).value == "88e2558c-7d6a-42e5-94c8-af9e8444d6c1"
     id_measure_1 = ws.cell(row=3, column=COL_INDEX["Решение_СведенияОНазначении_ИДМеры"] + 1).value
 
     assert ws.cell(row=5, column=COL_INDEX["Решение_Получатель_ФИО_Фамилия"] + 1).value == "Глызарев"
     assert ws.cell(row=5, column=COL_INDEX["Решение_РеквизитыРешения_НомерРешения"] + 1).value == "РЕШ-20261111-0005"
     assert ws.cell(row=5, column=COL_INDEX["Решение_ОНМСЗ_ИдентификаторОНМСЗ"] + 1).value == 6220000001
+    assert ws.cell(row=5, column=COL_INDEX["Решение_КодМСЗ"] + 1).value == 220119
     id_measure_2 = ws.cell(row=5, column=COL_INDEX["Решение_СведенияОНазначении_ИДМеры"] + 1).value
 
     assert id_measure_1 != id_measure_2

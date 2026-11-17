@@ -4,6 +4,7 @@ from pathlib import Path
 
 from egisso_to_ecp.domain.flk_rules import validate_and_convert_record
 from egisso_to_ecp.domain.models import ConversionConfig, OldEgissoRecord, ValidationSeverity
+from egisso_to_ecp.domain.normalizers import is_uuid_str
 
 
 def make_valid_record() -> OldEgissoRecord:
@@ -50,6 +51,29 @@ class TestFlkRules:
         assert decision.id_onmsz == "0377"
         assert decision.reason_num == "FACT-001"
 
+    def test_non_guid_fact_id_is_not_used_as_record_id(self) -> None:
+        cfg = ConversionConfig(input_path=Path("."), output_dir=Path("."))
+        decision, _ = validate_and_convert_record(make_valid_record(), cfg)
+        assert decision is not None
+        assert decision.id_decision != "FACT-001"
+        assert is_uuid_str(decision.id_decision)
+
+    def test_guid_fact_uuid_is_reused_as_record_id(self) -> None:
+        cfg = ConversionConfig(input_path=Path("."), output_dir=Path("."))
+        rec = make_valid_record()
+        rec.assignment_fact_uuid = "1a2b3c4d-0001-4a5b-8c6d-000000000001"
+        decision, _ = validate_and_convert_record(rec, cfg)
+        assert decision is not None
+        assert decision.id_decision == "1a2b3c4d-0001-4a5b-8c6d-000000000001"
+
+    def test_guid_onmsz_fallback_is_rejected(self) -> None:
+        cfg = ConversionConfig(input_path=Path("."), output_dir=Path("."))
+        rec = make_valid_record()
+        rec.onmsz_code = "88e2558c-7d6a-42e5-94c8-af9e8444d6c1"
+        decision, issues = validate_and_convert_record(rec, cfg)
+        assert decision is None
+        assert any(i.field_name == "ONMSZCode" for i in issues)
+
     def test_uuid_measure_and_generated_decision_num(self) -> None:
         cfg = ConversionConfig(input_path=Path("."), output_dir=Path("."))
         rec = OldEgissoRecord(
@@ -69,12 +93,41 @@ class TestFlkRules:
         decision, issues = validate_and_convert_record(rec, cfg)
         assert decision is not None
         assert decision.id_onmsz == "6220000001"
-        assert decision.code_msz == "6220000001"
+        assert decision.code_msz == "220119"  # Default federal TMSZ
         assert decision.reason_num == "РЕШ-20261111-0004"
         assert decision.id_measure == decision.id_decision
         assert decision.code_lmsz == "88e2558c-7d6a-42e5-94c8-af9e8444d6c1"
         assert decision.local_category_code == "d534a0cc-c323-4845-b18f-00ea013493bb"
         assert not [i for i in issues if i.severity.value == "ERROR"]
+
+        # Test fallback when code_tmsz is cleared
+        cfg_custom = ConversionConfig(input_path=Path("."), output_dir=Path("."), code_tmsz="")
+        dec_custom, _ = validate_and_convert_record(rec, cfg_custom)
+        assert dec_custom is not None
+        assert dec_custom.code_msz == "6220000001"
+
+    def test_inn_kpp_ogrn_organization_requisites(self) -> None:
+        cfg = ConversionConfig(
+            input_path=Path("."),
+            output_dir=Path("."),
+            onmsz_inn="3307010131",
+            onmsz_kpp="333401001",
+            onmsz_ogrn="1023302154226",
+            code_tmsz="220119",
+            code_lmsz_num="3200133300153",
+            code_category_num="3200133300153115004",
+            funding_source="5",
+        )
+        rec = make_valid_record()
+        decision, issues = validate_and_convert_record(rec, cfg)
+        assert decision is not None
+        assert decision.inn == "3307010131"
+        assert decision.kpp == "333401001"
+        assert decision.ogrn == "1023302154226"
+        assert decision.code_msz == "220119"
+        assert decision.lmsz_code_num == "3200133300153"
+        assert decision.category_code_num == "3200133300153115004"
+        assert decision.funding_source == "5"
 
     def test_invalid_snils_blocks_decision(self) -> None:
         cfg = ConversionConfig(input_path=Path("."), output_dir=Path("."))

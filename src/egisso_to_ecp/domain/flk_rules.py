@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import date
 from typing import TYPE_CHECKING
@@ -118,14 +119,24 @@ def validate_and_convert_record(
         )
 
     onmsz_code = str(record.onmsz_code or record.lmsz_id).strip()
-    if not onmsz_code:
+    # Решение_ОНМСЗ_ИдентификаторОНМСЗ has type `long`: a GUID (e.g. LMSZID used as a
+    # fallback) or an all-zero placeholder must never be squeezed into it.
+    if is_uuid_str(onmsz_code) or not re.sub(r"[\D0]", "", onmsz_code):
+        onmsz_code = ""
+
+    has_onmsz_reqs = bool(
+        config.onmsz_id.strip()
+        or (config.onmsz_inn.strip() and config.onmsz_kpp.strip() and config.onmsz_ogrn.strip())
+        or onmsz_code
+    )
+    if not has_onmsz_reqs:
         issues.append(
             ValidationIssue(
                 file_source=record.file_source,
                 row_index=record.row_index,
                 field_name="ONMSZCode",
                 value=onmsz_code,
-                message="Код ОНМСЗ / МСЗ обязателен",
+                message="Не указан код ОНМСЗ или реквизиты организации (ИНН/КПП/ОГРН)",
                 severity=ValidationSeverity.ERROR,
             )
         )
@@ -359,9 +370,9 @@ def validate_and_convert_record(
         return None, issues
 
     # Generate deterministic or unique decision ID
+    # Решение_ИДЗаписи must match the GUID pattern; non-GUID source IDs are not reused.
     decision_id = (
-        record.assignment_fact_uuid
-        or record.fact_id
+        next((v.strip() for v in (record.assignment_fact_uuid, record.fact_id) if v and is_uuid_str(v)), None)
         or str(
             uuid.uuid5(
                 uuid.NAMESPACE_OID,
@@ -376,15 +387,52 @@ def validate_and_convert_record(
     else:
         decision_num = f"РЕШ-{dec_date.replace('-', '')}-{record.row_index:04d}"
 
-    id_onmsz = normalize_onmsz_id(onmsz_code)
-    if record.lmsz_provider_code:
+    # Organization requisites (ID ОНМСЗ or INN/KPP/OGRN)
+    id_onmsz = (
+        config.onmsz_id.strip()
+        if config.onmsz_id.strip()
+        else (normalize_onmsz_id(onmsz_code) if onmsz_code else "")
+    )
+    inn = config.onmsz_inn.strip() if config.onmsz_inn.strip() else None
+    kpp = config.onmsz_kpp.strip() if config.onmsz_kpp.strip() else None
+    ogrn = config.onmsz_ogrn.strip() if config.onmsz_ogrn.strip() else None
+
+    # Measure codes: TMSZ and LMSZ
+    if config.code_tmsz.strip():
+        code_msz = config.code_tmsz.strip()
+    elif record.lmsz_provider_code:
         code_msz = record.lmsz_provider_code
     elif record.lmsz_id and not is_uuid_str(record.lmsz_id):
         code_msz = record.lmsz_id
     else:
-        code_msz = id_onmsz
-    code_lmsz = record.lmsz_id if is_uuid_str(record.lmsz_id) else None
-    local_category_code = category_id if is_uuid_str(category_id) else None
+        code_msz = id_onmsz or "220119"
+
+    if is_uuid_str(record.lmsz_id):
+        code_lmsz = record.lmsz_id
+    else:
+        code_lmsz = str(
+            uuid.uuid5(
+                uuid.NAMESPACE_OID,
+                f"LMSZ:{id_onmsz or config.onmsz_inn or 'default'}:{record.lmsz_id or '0000'}",
+            )
+        )
+    lmsz_code_num = config.code_lmsz_num.strip() if config.code_lmsz_num.strip() else None
+    category_code_num = config.code_category_num.strip() if config.code_category_num.strip() else None
+    local_category_code = (
+        config.code_category_num.strip()
+        if config.code_category_num.strip()
+        else (category_id if is_uuid_str(category_id) else None)
+    )
+
+    assignment_form = (
+        normalize_form_code(record.form_code, default=config.assignment_form)
+        if record.form_code
+        else config.assignment_form
+    )
+    periodicity = config.periodicity or "2"
+    funding_source = config.funding_source or "5"
+    decision_basis = config.decision_basis or "1"
+    monetization_val = monetization_flag if monetization_flag is not None else True
 
     period_id = f"{decision_id}_P1"
     region_code = oktmo[:2] if len(oktmo) >= 2 and oktmo[:2].isdigit() else config.default_region_code
@@ -397,7 +445,7 @@ def validate_and_convert_record(
         measury_code=measury,
         assignment_form=assignment_form,
         equivalent_amount=eq_amount_str,
-        monetization=monetization_flag,
+        monetization=monetization_val,
         comment=record.comment,
         content=record.content,
     )
@@ -406,6 +454,9 @@ def validate_and_convert_record(
         id_decision=decision_id,
         id_statement=None,
         id_onmsz=id_onmsz,
+        inn=inn,
+        kpp=kpp,
+        ogrn=ogrn,
         id_category=category_id,
         snils_recipient=snils,
         family_name=f_name,
@@ -416,18 +467,20 @@ def validate_and_convert_record(
         oktmo=oktmo,
         document_type="3",
         action_type="1",
-        decision_basis="1",
+        decision_basis=decision_basis,
         decision_type="01",
         decision_date=dec_date,
         date_start=start_date,
         date_finish=finish_date,
         assignment_form=assignment_form,
-        periodicity="2",
-        funding_source="1",
+        periodicity=periodicity,
+        funding_source=funding_source,
         id_measure=decision_id,
         region_code=region_code,
         code_msz=code_msz,
         code_lmsz=code_lmsz,
+        lmsz_code_num=lmsz_code_num,
+        category_code_num=category_code_num,
         local_category_code=local_category_code,
         reason_type=record.reason_type,
         reason_title=record.reason_title,

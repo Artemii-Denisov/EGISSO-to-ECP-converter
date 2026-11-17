@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from egisso_to_ecp.domain.normalizers import format_snils
+
 if TYPE_CHECKING:
     from egisso_to_ecp.domain.models import EcpPackage
 
@@ -144,7 +146,7 @@ def build_package_rows(package: EcpPackage) -> list[list[str]]:
         dec_row = [""] * total_cols
         dec_row[COL_INDEX["Решение_ИДЗаписи"]] = dec.id_decision
         dec_row[COL_INDEX["Решение_ТипДокумента"]] = dec.document_type
-        dec_row[COL_INDEX["Решение_Получатель_СНИЛС"]] = dec.snils_recipient
+        dec_row[COL_INDEX["Решение_Получатель_СНИЛС"]] = format_snils(dec.snils_recipient)
         dec_row[COL_INDEX["Решение_Получатель_ФИО_Фамилия"]] = dec.family_name
         dec_row[COL_INDEX["Решение_Получатель_ФИО_Имя"]] = dec.first_name
         if dec.patronymic:
@@ -153,7 +155,14 @@ def build_package_rows(package: EcpPackage) -> list[list[str]]:
         dec_row[COL_INDEX["Решение_РеквизитыРешения_НомерРешения"]] = dec.reason_num or dec.id_decision
         dec_row[COL_INDEX["Решение_РеквизитыРешения_ДатаРешения"]] = dec.decision_date
         dec_row[COL_INDEX["Решение_РеквизитыРешения_ТехническиеДатаВремя"]] = f"{dec.decision_date}T10:00:00"
-        dec_row[COL_INDEX["Решение_ОНМСЗ_ИдентификаторОНМСЗ"]] = dec.id_onmsz
+        if dec.id_onmsz:
+            dec_row[COL_INDEX["Решение_ОНМСЗ_ИдентификаторОНМСЗ"]] = dec.id_onmsz
+        if dec.inn:
+            dec_row[COL_INDEX["Решение_ОНМСЗ_РеквизитыОНМСЗ_ИНН"]] = dec.inn
+        if dec.kpp:
+            dec_row[COL_INDEX["Решение_ОНМСЗ_РеквизитыОНМСЗ_КПП"]] = dec.kpp
+        if dec.ogrn:
+            dec_row[COL_INDEX["Решение_ОНМСЗ_РеквизитыОНМСЗ_ОГРН"]] = dec.ogrn
         dec_row[COL_INDEX["Решение_КодМСЗ"]] = dec.code_msz or dec.id_onmsz
         if dec.code_lmsz:
             dec_row[COL_INDEX["Решение_КодЛМСЗ"]] = dec.code_lmsz
@@ -169,13 +178,13 @@ def build_package_rows(package: EcpPackage) -> list[list[str]]:
         dec_row[COL_INDEX["Решение_СведенияОНазначении_КодРегиона"]] = dec.region_code
         dec_row[COL_INDEX["Решение_СведенияОНазначении_ОКТМО"]] = dec.oktmo
         dec_row[COL_INDEX["Решение_СведенияОНазначении_ЛМСЗ"]] = (
-            dec.code_lmsz or dec.code_msz or dec.id_onmsz
+            dec.lmsz_code_num or dec.code_lmsz or dec.code_msz or dec.id_onmsz
         )
-        dec_row[COL_INDEX["Решение_СведенияОНазначении_КатегорияПолучателяЛокальная"]] = dec.id_category
-        if dec.local_category_code:
-            dec_row[COL_INDEX["Решение_СведенияОНазначении_КодЛокальнойКатегории"]] = (
-                dec.local_category_code
-            )
+        cat_code = dec.category_code_num or dec.id_category
+        dec_row[COL_INDEX["Решение_СведенияОНазначении_КатегорияПолучателяЛокальная"]] = cat_code
+        dec_row[COL_INDEX["Решение_СведенияОНазначении_КодЛокальнойКатегории"]] = (
+            dec.local_category_code or cat_code
+        )
         dec_row[COL_INDEX["Решение_СведенияОНазначении_ПризнакИсторическихДанных"]] = (
             "true" if dec.is_historical else "false"
         )
@@ -203,7 +212,7 @@ def build_package_rows(package: EcpPackage) -> list[list[str]]:
 
         for rp in dec.related_persons:
             rp_row = [""] * total_cols
-            rp_row[COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_СНИЛС"]] = rp.snils
+            rp_row[COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_СНИЛС"]] = format_snils(rp.snils)
             rp_row[COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_ФИО_Фамилия"]] = rp.family_name
             rp_row[COL_INDEX["Решение_СведенияОНазначении_СвязанноеЛицо_ФИО_Имя"]] = rp.first_name
             if rp.patronymic:

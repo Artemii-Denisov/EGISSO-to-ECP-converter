@@ -83,7 +83,63 @@ def convert(
             "-p",
             help="Код поставщика информации в ГИС ЕЦП",
         ),
-    ] = "430746",
+    ] = "1788",
+    inn: Annotated[
+        str,
+        typer.Option(
+            "--inn",
+            help="ИНН организации (ОНМСЗ)",
+        ),
+    ] = "",
+    kpp: Annotated[
+        str,
+        typer.Option(
+            "--kpp",
+            help="КПП организации (ОНМСЗ)",
+        ),
+    ] = "",
+    ogrn: Annotated[
+        str,
+        typer.Option(
+            "--ogrn",
+            help="ОГРН организации (ОНМСЗ)",
+        ),
+    ] = "",
+    code_tmsz: Annotated[
+        str,
+        typer.Option(
+            "--tmsz",
+            help="Код типовой меры в ЕЦП (ТМСЗ, по умолчанию 220119)",
+        ),
+    ] = "220119",
+    code_lmsz: Annotated[
+        str,
+        typer.Option(
+            "--lmsz",
+            help="Локальный числовой код меры (ЛМСЗ)",
+        ),
+    ] = "",
+    code_category: Annotated[
+        str,
+        typer.Option(
+            "--category",
+            help="Код категории получателя (локальной)",
+        ),
+    ] = "",
+    funding_source: Annotated[
+        str,
+        typer.Option(
+            "--funding",
+            help="Код источника финансирования (по умолчанию: 5 - бюджет субъекта РФ)",
+        ),
+    ] = "5",
+    assignment_form: Annotated[
+        str,
+        typer.Option(
+            "--form",
+            help="Код формы предоставления (по умолчанию: 3)",
+        ),
+    ] = "3",
 ) -> None:
     """Запуск конвертации реестров ЕГИССО в пакеты ГИС ЕЦП."""
     console.print(
@@ -110,6 +166,14 @@ def convert(
         export_csv=format_csv,
         export_xlsx=format_xlsx,
         provider_code=provider_code,
+        onmsz_inn=inn,
+        onmsz_kpp=kpp,
+        onmsz_ogrn=ogrn,
+        code_tmsz=code_tmsz,
+        code_lmsz_num=code_lmsz,
+        code_category_num=code_category,
+        funding_source=funding_source,
+        assignment_form=assignment_form,
     )
 
     with Progress(

@@ -32,7 +32,7 @@ from egisso_to_ecp.domain.models import ConversionConfig, ConversionSummary
 from egisso_to_ecp.presentation.gui.icon import create_app_icon
 from egisso_to_ecp.presentation.gui.worker import ConversionWorker
 
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.1.1"
 
 LICENSE_AND_DISCLAIMER_TEXT = """Лицензия на бесплатное использование (MIT) и отказ от ответственности
 
@@ -395,8 +395,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("EGISSO → ГИС ЕЦП (ЛК РСМСЗ)")
         self.setWindowIcon(create_app_icon())
-        self.resize(840, 720)
-        self.setMinimumSize(700, 600)
+        self.resize(880, 840)
+        self.setMinimumSize(780, 680)
 
         self.settings = QSettings("egisso-to-ecp", "EGISSO_to_ECP")
         saved_theme = initial_theme or str(self.settings.value("ui/theme", "dark"))
@@ -539,28 +539,109 @@ class MainWindow(QMainWindow):
         checks_grid.addWidget(self.cb_format_xlsx, 1, 1)
 
         options_outer.addLayout(checks_grid)
-
-        divider = QFrame()
-        divider.setObjectName("Divider")
-        divider.setFrameShape(QFrame.Shape.HLine)
-        options_outer.addWidget(divider)
-
-        provider_row = QHBoxLayout()
-        provider_row.setSpacing(12)
-        lbl_provider = QLabel("Код поставщика (ПоставщикИнформации):")
-        lbl_provider.setObjectName("FieldLabel")
-        provider_row.addWidget(lbl_provider)
-
-        saved_provider = str(self.settings.value("ui/provider_code", "430746"))
-        self.txt_provider = QLineEdit(saved_provider)
-        self.txt_provider.setFixedHeight(36)
-        self.txt_provider.setFixedWidth(180)
-        self.txt_provider.setToolTip("Числовой код поставщика информации из реестра ГИС ЕЦП")
-        provider_row.addWidget(self.txt_provider)
-        provider_row.addStretch()
-
-        options_outer.addLayout(provider_row)
         main_layout.addWidget(options_card)
+
+        # 4. Card 3: Organization Requisites & ECP Measure Codes
+        org_card = QFrame()
+        org_card.setObjectName("SurfaceCard")
+        org_outer = QVBoxLayout(org_card)
+        org_outer.setContentsMargins(16, 14, 16, 16)
+        org_outer.setSpacing(10)
+
+        lbl_org_title = QLabel("РЕКВИЗИТЫ ОРГАНИЗАЦИИ И МЕРЫ В ГИС ЕЦП")
+        lbl_org_title.setObjectName("SectionTitle")
+        org_outer.addWidget(lbl_org_title)
+
+        org_grid = QGridLayout()
+        org_grid.setHorizontalSpacing(16)
+        org_grid.setVerticalSpacing(8)
+
+        # Left Column: Organization
+        lbl_prov = QLabel("Поставщик информации:")
+        lbl_prov.setObjectName("FieldLabel")
+        saved_provider = str(self.settings.value("ui/provider_code", "1788"))
+        self.txt_provider = QLineEdit(saved_provider)
+        self.txt_provider.setFixedHeight(34)
+        self.txt_provider.setPlaceholderText("ID поставщика в ЕЦП (напр. 1788)")
+        self.txt_provider.setToolTip("Идентификатор поставщика информации из реестра участников взаимодействия ЕЦП")
+        org_grid.addWidget(lbl_prov, 0, 0)
+        org_grid.addWidget(self.txt_provider, 0, 1)
+
+        lbl_inn = QLabel("ИНН организации:")
+        lbl_inn.setObjectName("FieldLabel")
+        saved_inn = str(self.settings.value("ui/onmsz_inn", ""))
+        self.txt_inn = QLineEdit(saved_inn)
+        self.txt_inn.setFixedHeight(34)
+        self.txt_inn.setPlaceholderText("10 цифр (напр. 3307010131)")
+        self.txt_inn.setToolTip("ИНН органа или учреждения, назначающего меру (ОНМСЗ)")
+        org_grid.addWidget(lbl_inn, 1, 0)
+        org_grid.addWidget(self.txt_inn, 1, 1)
+
+        lbl_kpp = QLabel("КПП организации:")
+        lbl_kpp.setObjectName("FieldLabel")
+        saved_kpp = str(self.settings.value("ui/onmsz_kpp", ""))
+        self.txt_kpp = QLineEdit(saved_kpp)
+        self.txt_kpp.setFixedHeight(34)
+        self.txt_kpp.setPlaceholderText("9 цифр (напр. 333401001)")
+        self.txt_kpp.setToolTip("КПП органа или учреждения, назначающего меру (ОНМСЗ)")
+        org_grid.addWidget(lbl_kpp, 2, 0)
+        org_grid.addWidget(self.txt_kpp, 2, 1)
+
+        lbl_ogrn = QLabel("ОГРН организации:")
+        lbl_ogrn.setObjectName("FieldLabel")
+        saved_ogrn = str(self.settings.value("ui/onmsz_ogrn", ""))
+        self.txt_ogrn = QLineEdit(saved_ogrn)
+        self.txt_ogrn.setFixedHeight(34)
+        self.txt_ogrn.setPlaceholderText("13 цифр (напр. 1023302154226)")
+        self.txt_ogrn.setToolTip("ОГРН органа или учреждения, назначающего меру (ОНМСЗ)")
+        org_grid.addWidget(lbl_ogrn, 3, 0)
+        org_grid.addWidget(self.txt_ogrn, 3, 1)
+
+        # Right Column: Measure codes & Parameters
+        lbl_tmsz = QLabel("Код типовой меры (ТМСЗ):")
+        lbl_tmsz.setObjectName("FieldLabel")
+        saved_tmsz = str(self.settings.value("ui/code_tmsz", "220119"))
+        self.txt_tmsz = QLineEdit(saved_tmsz)
+        self.txt_tmsz.setFixedHeight(34)
+        self.txt_tmsz.setPlaceholderText("Код ТМСЗ (напр. 220119)")
+        self.txt_tmsz.setToolTip("Код типовой меры по федеральному классификатору ЕЦП")
+        org_grid.addWidget(lbl_tmsz, 0, 2)
+        org_grid.addWidget(self.txt_tmsz, 0, 3)
+
+        lbl_lmsz = QLabel("Код локальной меры (ЛМСЗ):")
+        lbl_lmsz.setObjectName("FieldLabel")
+        saved_lmsz = str(self.settings.value("ui/code_lmsz", ""))
+        self.txt_lmsz = QLineEdit(saved_lmsz)
+        self.txt_lmsz.setFixedHeight(34)
+        self.txt_lmsz.setPlaceholderText("Числовой код (напр. 3200133300153)")
+        self.txt_lmsz.setToolTip("Числовой код локальной меры (ЛМСЗ) в реестре региона")
+        org_grid.addWidget(lbl_lmsz, 1, 2)
+        org_grid.addWidget(self.txt_lmsz, 1, 3)
+
+        lbl_cat = QLabel("Код категории получателя:")
+        lbl_cat.setObjectName("FieldLabel")
+        saved_cat = str(self.settings.value("ui/code_category", ""))
+        self.txt_category = QLineEdit(saved_cat)
+        self.txt_category.setFixedHeight(34)
+        self.txt_category.setPlaceholderText("Числовой код (напр. 3200133300153115004)")
+        self.txt_category.setToolTip("Числовой код категории получателя локальной меры по классификатору КМСЗ")
+        org_grid.addWidget(lbl_cat, 2, 2)
+        org_grid.addWidget(self.txt_category, 2, 3)
+
+        lbl_fund = QLabel("Источник финансирования:")
+        lbl_fund.setObjectName("FieldLabel")
+        saved_fund = str(self.settings.value("ui/funding_source", "5"))
+        self.txt_funding = QLineEdit(saved_fund)
+        self.txt_funding.setFixedHeight(34)
+        self.txt_funding.setPlaceholderText("5 = бюджет субъекта РФ")
+        self.txt_funding.setToolTip("Код источника финансирования (5 - бюджет субъекта РФ, 1 - федеральный бюджет)")
+        org_grid.addWidget(lbl_fund, 3, 2)
+        org_grid.addWidget(self.txt_funding, 3, 3)
+
+        org_grid.setColumnStretch(1, 1)
+        org_grid.setColumnStretch(3, 1)
+        org_outer.addLayout(org_grid)
+        main_layout.addWidget(org_card)
 
         # 4. Card 3: Execution Log Console
         log_card = QFrame()
@@ -666,8 +747,23 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Ошибка выбора формата", "Выберите хотя бы один формат выгрузки (CSV или Excel).")
             return
 
-        provider_val = self.txt_provider.text().strip() or "430746"
+        provider_val = self.txt_provider.text().strip() or "1788"
+        inn_val = self.txt_inn.text().strip()
+        kpp_val = self.txt_kpp.text().strip()
+        ogrn_val = self.txt_ogrn.text().strip()
+        tmsz_val = self.txt_tmsz.text().strip() or "220119"
+        lmsz_val = self.txt_lmsz.text().strip()
+        cat_val = self.txt_category.text().strip()
+        fund_val = self.txt_funding.text().strip() or "5"
+
         self.settings.setValue("ui/provider_code", provider_val)
+        self.settings.setValue("ui/onmsz_inn", inn_val)
+        self.settings.setValue("ui/onmsz_kpp", kpp_val)
+        self.settings.setValue("ui/onmsz_ogrn", ogrn_val)
+        self.settings.setValue("ui/code_tmsz", tmsz_val)
+        self.settings.setValue("ui/code_lmsz", lmsz_val)
+        self.settings.setValue("ui/code_category", cat_val)
+        self.settings.setValue("ui/funding_source", fund_val)
 
         config = ConversionConfig(
             input_path=Path(input_dir_str),
@@ -677,6 +773,13 @@ class MainWindow(QMainWindow):
             export_csv=self.cb_format_csv.isChecked(),
             export_xlsx=self.cb_format_xlsx.isChecked(),
             provider_code=provider_val,
+            onmsz_inn=inn_val,
+            onmsz_kpp=kpp_val,
+            onmsz_ogrn=ogrn_val,
+            code_tmsz=tmsz_val,
+            code_lmsz_num=lmsz_val,
+            code_category_num=cat_val,
+            funding_source=fund_val,
         )
 
         self.btn_start.setEnabled(False)

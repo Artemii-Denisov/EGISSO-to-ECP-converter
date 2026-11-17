@@ -90,6 +90,17 @@ def normalize_snils(raw: Any) -> tuple[str | None, str | None]:
     return digits, None
 
 
+def format_snils(digits: str) -> str:
+    """
+    Formats an 11-digit normalized SNILS as 'XXX-XXX-XXX YY', the representation
+    used in the official GIS ECP CSV template (e.g. '001-230-354 57').
+    Values that are not exactly 11 digits are returned unchanged.
+    """
+    if len(digits) != 11 or not digits.isdigit():
+        return digits
+    return f"{digits[0:3]}-{digits[3:6]}-{digits[6:9]} {digits[9:11]}"
+
+
 def normalize_date(raw: Any) -> tuple[str | None, str | None]:
     """
     Normalizes various date inputs (date, datetime, Excel serial number, string)
