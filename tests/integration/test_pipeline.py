@@ -358,29 +358,34 @@ def test_real_sample_file_smoke(tmp_path: Path) -> None:
 def test_pipeline_with_mapping_rules(tmp_path: Path) -> None:
     from egisso_to_ecp.domain.models import LmszMappingRule
 
+    in_dir = tmp_path / "input_mapped"
+    in_dir.mkdir()
+    sample_file = in_dir / "social_stipends_2024.xlsx"
+    create_test_registry(sample_file)
+
     out_dir = tmp_path / "output_mapped"
-    karelia_rule = LmszMappingRule(
-        lmsz_uuid="88e2558c-7d6a-42e5-94c8-af9e8444d6c1",
-        lmsz_code="1",
+    rule = LmszMappingRule(
+        lmsz_uuid="fea26e12-853b-4da9-98b6-1a25048fe6f4",
+        lmsz_code="377",
         lmsz_name="Соцстипендия",
-        category_uuid="d534a0cc-c323-4845-b18f-00ea013493bb",
-        category_code="1",
+        category_uuid="f446f551-a565-4f28-9fc7-a9f96c1c745b",
+        category_code="101",
         category_name="Студенты",
         onmsz_code="6220000001",
     )
     config = ConversionConfig(
-        input_path=_DOCS_SAMPLES,
+        input_path=in_dir,
         output_dir=out_dir,
         export_csv=True,
         export_xlsx=True,
         export_xml=True,
-        mapping_rules=[karelia_rule],
+        mapping_rules=[rule],
     )
     summary = ConversionPipeline(config).run()
     assert summary.valid_decisions_count == 2
-    assert len(summary.csv_files_written) == 1
-    assert len(summary.xlsx_files_written) == 1
-    assert len(summary.xml_files_written) == 1
+    assert len(summary.csv_files_written) == 2
+    assert len(summary.xlsx_files_written) == 2
+    assert len(summary.xml_files_written) == 2
 
     # Check XLSX generated with mapped values
     wb = openpyxl.load_workbook(summary.xlsx_files_written[0])
@@ -388,9 +393,9 @@ def test_pipeline_with_mapping_rules(tmp_path: Path) -> None:
     assert ws is not None
 
     # Row 3 is first decision
-    assert ws.cell(row=3, column=COL_INDEX["Решение_КодЛМСЗ"] + 1).value == "88e2558c-7d6a-42e5-94c8-af9e8444d6c1"
-    assert str(ws.cell(row=3, column=COL_INDEX["Решение_СведенияОНазначении_ЛМСЗ"] + 1).value) == "1"
-    assert str(ws.cell(row=3, column=COL_INDEX["Решение_СведенияОНазначении_КатегорияПолучателяЛокальная"] + 1).value) == "1"
-    assert str(ws.cell(row=3, column=COL_INDEX["Решение_СведенияОНазначении_КодЛокальнойКатегории"] + 1).value) == "1"
+    assert ws.cell(row=3, column=COL_INDEX["Решение_КодЛМСЗ"] + 1).value == "fea26e12-853b-4da9-98b6-1a25048fe6f4"
+    assert str(ws.cell(row=3, column=COL_INDEX["Решение_СведенияОНазначении_ЛМСЗ"] + 1).value) == "377"
+    assert str(ws.cell(row=3, column=COL_INDEX["Решение_СведенияОНазначении_КатегорияПолучателяЛокальная"] + 1).value) == "101"
+    assert str(ws.cell(row=3, column=COL_INDEX["Решение_СведенияОНазначении_КодЛокальнойКатегории"] + 1).value) == "101"
     wb.close()
 

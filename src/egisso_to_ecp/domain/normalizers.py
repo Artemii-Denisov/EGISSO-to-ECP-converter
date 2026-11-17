@@ -318,7 +318,9 @@ def normalize_code_num(raw: Any) -> str:
     if not val_str:
         return ""
     if re.match(r"^\d+\.0+$", val_str):
-        return val_str.split(".")[0]
+        val_str = val_str.split(".")[0]
+    if val_str.isdigit():
+        return str(int(val_str))
     return val_str
 
 
