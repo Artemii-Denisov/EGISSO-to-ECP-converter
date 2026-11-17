@@ -32,7 +32,7 @@ from egisso_to_ecp.domain.models import ConversionConfig, ConversionSummary
 from egisso_to_ecp.presentation.gui.icon import create_app_icon
 from egisso_to_ecp.presentation.gui.worker import ConversionWorker
 
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.1.2"
 
 LICENSE_AND_DISCLAIMER_TEXT = """Лицензия на бесплатное использование (MIT) и отказ от ответственности
 
@@ -538,6 +538,11 @@ class MainWindow(QMainWindow):
         self.cb_format_xlsx.setToolTip("Сохранять пакеты XLSX в отдельную папку /xlsx/")
         checks_grid.addWidget(self.cb_format_xlsx, 1, 1)
 
+        self.cb_format_xml = QCheckBox("Формат XML (МСЗСР)")
+        self.cb_format_xml.setChecked(False)
+        self.cb_format_xml.setToolTip("Сохранять иерархические пакеты XML в отдельную папку /xml/")
+        checks_grid.addWidget(self.cb_format_xml, 2, 0)
+
         options_outer.addLayout(checks_grid)
         main_layout.addWidget(options_card)
 
@@ -743,8 +748,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Ошибка ввода", "Укажите папку для сохранения результатов.")
             return
 
-        if not self.cb_format_csv.isChecked() and not self.cb_format_xlsx.isChecked():
-            QMessageBox.warning(self, "Ошибка выбора формата", "Выберите хотя бы один формат выгрузки (CSV или Excel).")
+        if not self.cb_format_csv.isChecked() and not self.cb_format_xlsx.isChecked() and not self.cb_format_xml.isChecked():
+            QMessageBox.warning(self, "Ошибка выбора формата", "Выберите хотя бы один формат выгрузки (CSV, Excel или XML).")
             return
 
         provider_val = self.txt_provider.text().strip() or "1788"
@@ -772,6 +777,7 @@ class MainWindow(QMainWindow):
             split_by_months=self.cb_split_months.isChecked(),
             export_csv=self.cb_format_csv.isChecked(),
             export_xlsx=self.cb_format_xlsx.isChecked(),
+            export_xml=self.cb_format_xml.isChecked(),
             provider_code=provider_val,
             onmsz_inn=inn_val,
             onmsz_kpp=kpp_val,
@@ -816,6 +822,7 @@ class MainWindow(QMainWindow):
             f"• Сформировано пакетов: {summary.packages_generated_count}\n"
             f"• Файлов CSV: {len(summary.csv_files_written)}\n"
             f"• Файлов XLSX: {len(summary.xlsx_files_written)}\n"
+            f"• Файлов XML: {len(summary.xml_files_written)}\n"
         )
         if summary.error_report_path:
             msg += f"\nЗамечания ФЛК сохранены в:\n{summary.error_report_path.name}"

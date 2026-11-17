@@ -215,6 +215,7 @@ class ConversionConfig(BaseModel):
     split_by_months: bool = True
     export_csv: bool = True
     export_xlsx: bool = False
+    export_xml: bool = False
     provider_code: str = "1788"
     onmsz_id: str = ""
     onmsz_inn: str = ""
@@ -241,6 +242,7 @@ class ConversionSummary(BaseModel):
     packages_generated_count: int = 0
     csv_files_written: list[Path] = Field(default_factory=list)
     xlsx_files_written: list[Path] = Field(default_factory=list)
+    xml_files_written: list[Path] = Field(default_factory=list)
     error_report_path: Path | None = None
     issues: list[ValidationIssue] = Field(default_factory=list)
 

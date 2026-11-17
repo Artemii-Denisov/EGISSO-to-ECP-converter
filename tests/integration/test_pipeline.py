@@ -166,6 +166,7 @@ def test_end_to_end_conversion(tmp_path: Path) -> None:
         split_by_months=True,
         export_csv=True,
         export_xlsx=True,
+        export_xml=True,
         provider_code="TEST_PROVIDER_99",
     )
 
@@ -181,13 +182,17 @@ def test_end_to_end_conversion(tmp_path: Path) -> None:
     # 2. Check output directories and files
     csv_dir = out_dir / "csv"
     xlsx_dir = out_dir / "xlsx"
+    xml_dir = out_dir / "xml"
     assert csv_dir.exists()
     assert xlsx_dir.exists()
+    assert xml_dir.exists()
 
     csv_files = list(csv_dir.glob("*.csv"))
     xlsx_files = list(xlsx_dir.glob("*.xlsx"))
+    xml_files = list(xml_dir.glob("*.xml"))
     assert len(csv_files) == 2
     assert len(xlsx_files) == 2
+    assert len(xml_files) == 2
 
     # 3. Check error report
     err_report = out_dir / "errors_report.xlsx"

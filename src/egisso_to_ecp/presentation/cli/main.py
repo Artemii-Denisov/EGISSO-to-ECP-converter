@@ -76,6 +76,13 @@ def convert(
             help="Выгружать пакеты в формате Excel (.xlsx) (по умолчанию: ВЫКЛ)",
         ),
     ] = False,
+    format_xml: Annotated[
+        bool,
+        typer.Option(
+            "--xml/--no-xml",
+            help="Выгружать пакеты в формате XML (МСЗСР) (по умолчанию: ВЫКЛ)",
+        ),
+    ] = False,
     provider_code: Annotated[
         str,
         typer.Option(
@@ -148,14 +155,14 @@ def convert(
             f"[dim]Каталог источника: {input_path}[/dim]\n"
             f"[dim]Каталог назначения: {output_dir}[/dim]\n"
             f"[dim]Рекурсивный поиск: {'ВКЛ' if recursive else 'ВЫКЛ'} | Помесячно: {'ВКЛ' if split_months else 'ВЫКЛ'}[/dim]\n"
-            f"[dim]Форматы: CSV={'ВКЛ' if format_csv else 'ВЫКЛ'}, XLSX={'ВКЛ' if format_xlsx else 'ВЫКЛ'}[/dim]",
+            f"[dim]Форматы: CSV={'ВКЛ' if format_csv else 'ВЫКЛ'}, XLSX={'ВКЛ' if format_xlsx else 'ВЫКЛ'}, XML={'ВКЛ' if format_xml else 'ВЫКЛ'}[/dim]",
             title="ГИС ЕЦП Миграция",
             border_style="cyan",
         )
     )
 
-    if not format_csv and not format_xlsx:
-        console.print("[bold red]Ошибка:[/bold red] Необходимо выбрать хотя бы один формат выгрузки (--csv или --xlsx)")
+    if not format_csv and not format_xlsx and not format_xml:
+        console.print("[bold red]Ошибка:[/bold red] Необходимо выбрать хотя бы один формат выгрузки (--csv, --xlsx или --xml)")
         raise typer.Exit(code=1)
 
     config = ConversionConfig(
@@ -165,6 +172,7 @@ def convert(
         split_by_months=split_months,
         export_csv=format_csv,
         export_xlsx=format_xlsx,
+        export_xml=format_xml,
         provider_code=provider_code,
         onmsz_inn=inn,
         onmsz_kpp=kpp,

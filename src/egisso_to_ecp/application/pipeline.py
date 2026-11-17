@@ -17,6 +17,7 @@ from egisso_to_ecp.infrastructure.readers.excel_reader import ExcelRegistryReade
 from egisso_to_ecp.infrastructure.scanner import DirectoryScanner
 from egisso_to_ecp.infrastructure.writers.ecp_csv_writer import EcpCsvWriter
 from egisso_to_ecp.infrastructure.writers.ecp_excel_writer import EcpExcelWriter
+from egisso_to_ecp.infrastructure.writers.ecp_xml_writer import EcpXmlWriter
 from egisso_to_ecp.infrastructure.writers.error_report_writer import ErrorReportWriter
 
 logger = logging.getLogger(__name__)
@@ -130,6 +131,13 @@ class ConversionPipeline:
             for pkg in packages:
                 written_xlsx = xlsx_writer.write_package(pkg)
                 summary.xlsx_files_written.append(written_xlsx)
+
+        if self.config.export_xml:
+            xml_dir = self.config.output_dir / "xml"
+            xml_writer = EcpXmlWriter(xml_dir)
+            for pkg in packages:
+                written_xml = xml_writer.write_package(pkg)
+                summary.xml_files_written.append(written_xml)
 
         # 5. Writing Error Report
         if all_issues:
